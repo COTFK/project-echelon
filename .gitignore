@@ -1,0 +1,10 @@
+# Build artifacts
+/target
+
+# Environment file
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+

@@ -1,0 +1,17 @@
+name: project-echelon
+
+services:
+  runner:
+    build: 
+      dockerfile: ./runner.Dockerfile
+    develop:
+      watch:
+        - action: rebuild
+          path: ./echelon-runner/src
+    healthcheck:
+      test: "curl -f http://127.0.0.1:3000/health"
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    ports:
+      - "3000:3000"
