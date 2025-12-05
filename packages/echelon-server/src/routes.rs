@@ -48,7 +48,7 @@ pub async fn download(
     Path(id): Path<Ulid>,
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Download requested.", id);
-    let mut lock = jobs.write().await;
+    let lock = jobs.write().await;
 
     // Check if job exists, is done, and has video data before removing
     let has_video = lock
@@ -57,8 +57,8 @@ pub async fn download(
 
     if has_video {
         // Safe to remove - we verified video exists
-        let replay = lock.remove(&id).unwrap();
-        let video_data = replay.video.unwrap();
+        let replay = lock.get(&id).unwrap();
+        let video_data = replay.video.clone().unwrap();
         let video_size = video_data.len();
 
         tracing::info!(
