@@ -87,7 +87,7 @@ pub struct StatusResponse {
 }
 
 impl StatusResponse {
-    /// Converts the API response to a `ReplayStatus`.
+    /// Converts the API response to a [`ReplayStatus`].
     pub fn into_replay_status(self, replay_id: &str) -> ReplayStatus {
         match self.status.as_str() {
             "queued" => ReplayStatus::Queued(self.position.unwrap_or(0)),

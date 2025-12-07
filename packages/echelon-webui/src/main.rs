@@ -23,13 +23,10 @@ fn App() -> Element {
         document::Stylesheet { href: "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" }
         document::Script { src: "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" }
         div {
-            class: "relative h-dvh w-dvw overflow-x-hidden overflow-y-scroll",
+            class: "relative flex flex-col h-dvh w-dvw overflow-x-hidden overflow-y-auto",
             "data-theme": "business",
             NavBar {}
-            main {
-                class: "h-full flex items-center justify-center",
-                UploadForm {}
-            }
+            UploadForm {}
             Footer {}
         }
     }

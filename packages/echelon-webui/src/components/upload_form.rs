@@ -99,14 +99,14 @@ pub fn UploadForm() -> Element {
 
     rsx! {
         div {
-            class: "flex flex-row items-center justify-evenly w-full px-8",
+            class: "flex flex-col md:flex-row gap-4 items-center md:justify-evenly w-full flex-1 px-4 py-8",
             if show_hero() {
                 Hero {  }
             }
             form {
                 onsubmit: handle_submit,
                 fieldset {
-                    class: "fieldset bg-base-200 border-base-300 rounded-box w-md border pb-6 pt-4 px-6 flex flex-col gap-4",
+                    class: "fieldset bg-base-200 border-base-300 rounded-box min-w-64 md:w-sm lg:w-md border pb-6 pt-4 px-6 flex flex-col gap-4",
                     if status().can_submit() {
                         legend { class: "fieldset-legend text-base", "Upload your replay" }
                         div {

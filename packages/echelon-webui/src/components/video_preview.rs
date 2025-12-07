@@ -7,9 +7,9 @@ use dioxus::prelude::*;
 pub fn VideoPreview(video_url: String) -> Element {
     rsx! {
         div {
-            class: "card bg-base-200 border-base-300 border shadow-md mt-4 max-w-1/2",
+            class: "card bg-base-200 border-base-300 border shadow-md mt-4 md:max-w-1/2",
             div {
-                class: "card-body",
+                class: "card-body px-4",
                 h2 { class: "card-title", "Preview" }
                 video {
                     class: "w-full rounded-lg",
@@ -24,7 +24,7 @@ pub fn VideoPreview(video_url: String) -> Element {
                         "Download expires in 1 hour"
                     }
                     a {
-                        class: "btn btn-primary",
+                        class: "btn btn-primary px-3",
                         href: "{video_url}",
                         download: true,
                         i { class: "bi bi-download me-1" }

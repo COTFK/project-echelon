@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 pub fn NavBar() -> Element {
     rsx! {
         nav {
-            class: "navbar absolute bg-base-300 shadow-sm",
+            class: "navbar sticky bg-base-300 shadow-sm",
             a {
                 href: "/",
                 class: "btn btn-ghost text-xl",

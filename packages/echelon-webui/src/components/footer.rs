@@ -9,7 +9,7 @@ pub fn Footer() -> Element {
 
     rsx!(
         footer {
-            class: "absolute bottom-0 footer sm:footer-horizontal bg-base-300 text-neutral-content items-center p-4 justify-between",
+            class: "footer footer-horizontal bg-base-300 text-neutral-content items-center p-4 justify-between",
             aside {
                 class: "items-center",
                 p {
