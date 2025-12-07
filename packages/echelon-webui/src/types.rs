@@ -9,8 +9,11 @@ pub const MAX_FILE_SIZE: usize = 10 * 1024 * 1024;
 pub const REPLAY_EXTENSION: &str = ".yrpX";
 
 /// Base URL for the API server.
-/// In production, this should be configured via environment or use a relative path with a reverse proxy.
-pub const API_BASE_URL: &str = "http://localhost:3000";
+/// Defaulting to http://localhost:3000 if unconfigured, to match the local Compose file
+pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
+    Some(url) => url,
+    None => "http://localhost:3000",
+};
 
 /// Represents the current status of a replay processing job.
 #[derive(Clone, PartialEq, Debug, Default)]
