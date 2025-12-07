@@ -9,6 +9,10 @@ RUN cargo install dioxus-cli && \
 # Copy workspace files
 COPY packages/echelon-webui ./packages/echelon-webui
 
+# API URL - defaults to production, can be overridden
+ARG API_BASE_URL="https://echelon-server.arqalite.org"
+ENV API_BASE_URL=$API_BASE_URL
+
 # Build the web app
 WORKDIR /app/packages/echelon-webui
 RUN dx build --release
@@ -19,31 +23,8 @@ FROM nginx:alpine AS runtime
 # Copy built assets to nginx
 COPY --from=builder /app/packages/echelon-webui/target/dx/echelon-webui/release/web/public /usr/share/nginx/html
 
-# Copy custom nginx config for SPA routing
-COPY <<EOF /etc/nginx/conf.d/default.conf
-server {
-    listen 80;
-    listen [::]:80;
-    server_name localhost;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Gzip compression
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/wasm;
-
-    # Cache static assets
-    location ~* \.(js|css|wasm|png|jpg|jpeg|gif|ico|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # SPA fallback - serve index.html for all routes
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-EOF
+# Copy custom nginx config
+COPY --from=builder /app/packages/echelon-webui/config/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

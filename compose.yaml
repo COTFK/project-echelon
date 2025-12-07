@@ -17,8 +17,10 @@ services:
       - "3000:3000"
 
   webui:
-    build:
+    build: 
       dockerfile: ./webui.Dockerfile
+      args:
+        API_BASE_URL: "http://localhost:3000"
     develop:
       watch:
         - action: rebuild
