@@ -84,7 +84,8 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?
         .status = ReplayStatus::Recording;
 
-    let tmp_dir = tempdir().map_err(|e| anyhow::anyhow!("Failed to create temporary directory: {e}"))?;
+    let tmp_dir =
+        tempdir().map_err(|e| anyhow::anyhow!("Failed to create temporary directory: {e}"))?;
     tracing::debug!("[{}] Created temp directory: {:?}", id, tmp_dir.path());
 
     let temp_replay_path = format!("{id}.yrpX");

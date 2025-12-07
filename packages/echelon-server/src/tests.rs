@@ -1,9 +1,9 @@
 use crate::routes::{download, status, upload};
 use crate::types::Replay;
+use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use axum::Router;
 use axum_test::TestServer;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -365,7 +365,10 @@ async fn test_download_job_not_done_yet() {
     response.assert_status_not_found();
 
     // Verify job was NOT removed from state
-    assert!(state.read().await.contains_key(&id), "Job should still exist");
+    assert!(
+        state.read().await.contains_key(&id),
+        "Job should still exist"
+    );
 }
 
 #[tokio::test]
@@ -390,7 +393,10 @@ async fn test_download_job_in_error_state() {
     response.assert_status_not_found();
 
     // Verify job was NOT removed
-    assert!(state.read().await.contains_key(&id), "Failed job should still exist");
+    assert!(
+        state.read().await.contains_key(&id),
+        "Failed job should still exist"
+    );
 }
 
 #[tokio::test]
@@ -417,11 +423,14 @@ async fn test_download_success_removes_job() {
     assert_eq!(response.as_bytes().as_ref(), b"fake video data");
 
     // Verify job was removed from state after download
-    assert!(!state.read().await.contains_key(&id), "Job should be removed after download");
+    assert!(
+        !state.read().await.contains_key(&id),
+        "Job should be removed after download"
+    );
 }
 
 // =============================================================================
-// is_replay_file() edge case tests  
+// is_replay_file() edge case tests
 // =============================================================================
 
 #[tokio::test]

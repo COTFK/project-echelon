@@ -14,6 +14,7 @@ use crate::worker::cleanup;
 use crate::worker::worker;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
+use axum::http::Method;
 use axum::routing::get;
 use axum::routing::post;
 use commands::start_xvfb;
@@ -21,11 +22,10 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
-use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_http::cors::{Any, CorsLayer};
 use ulid::Ulid;
-use axum::http::Method;
 
 #[tokio::main]
 async fn main() {
