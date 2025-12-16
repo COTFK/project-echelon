@@ -6,6 +6,7 @@ A web application that interfaces with [echelon-server](/packages/echelon-server
 - [Rust] 1.90.0 or higher
 - The [Dioxus CLI]
 
+[Rust]: https://rust-lang.org/
 [Dioxus CLI]: https://dioxuslabs.com/learn/0.7/getting_started/#install-the-dioxus-cli
 
 ## Building and testing
