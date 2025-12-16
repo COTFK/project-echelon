@@ -11,6 +11,9 @@ The project currently maintains two packages:
 - [echelon-server](packages/echelon-server) - a Rust+Axum server that handles the conversion
 - [echelon-webui](packages/echelon-webui) - a web UI (in Rust+Dioxus) to interface with the server
 
+## Contributing
+We accept contributions! Submit your patches (or request repository access) in the [Fire King Discord server](https://discord.gg/8JtxHUAdGq).
+
 ## License
 Project Echelon is licensed under the [MIT license](LICENSE).
 
