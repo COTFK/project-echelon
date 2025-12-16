@@ -58,13 +58,13 @@ Three routes are available:
     - **Note:** Successfully downloading a video removes it from the server.
 
 ## Docker deployments
-Project Echelon is intended to be deployed in a Docker container; as such, a `Dockerfile` and `compose.yaml` representative of our reference deployment are provided in the repository root.
+Project Echelon is intended to be deployed in a Docker container; as such, a `server.Dockerfile` and `compose.yaml` representative of our reference deployment are provided in the repository root.
 
 They should serve well as a starting point for your own deployment and should be ready to use - just `docker compose up --build` and you're good to go.
 
 A prebuilt binary of our EDOPro fork alongside two config files (`system.conf` and `configs.json`) are provided in the `deployment/` directory of this package and are used by the Dockerfile to generate a ready-to-use image. Feel free to replace it with your own binaries/configs according to your needs.
 
 ## License
-Project Echelon is licensed under the [MIT license](LICENSE).
+Project Echelon is licensed under the [MIT license](/COTFK/project-echelon/src/branch/master/LICENSE).
 
 Unless explicitly stated otherwise, any contribution to this project shall be licensed under MIT, without any additional terms or conditions.
