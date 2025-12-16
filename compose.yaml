@@ -1,13 +1,13 @@
 name: project-echelon
 
 services:
-  runner:
+  server:
     build: 
-      dockerfile: ./runner.Dockerfile
+      dockerfile: ./server.Dockerfile
     develop:
       watch:
         - action: rebuild
-          path: ./echelon-runner/src
+          path: ./packages/echelon-server/src
     healthcheck:
       test: "curl -f http://127.0.0.1:3000/health"
       interval: 30s
@@ -15,3 +15,15 @@ services:
       retries: 3
     ports:
       - "3000:3000"
+
+  webui:
+    build: 
+      dockerfile: ./webui.Dockerfile
+      args:
+        API_BASE_URL: "http://localhost:3000"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./packages/echelon-webui/src
+    ports:
+      - "8080:80"

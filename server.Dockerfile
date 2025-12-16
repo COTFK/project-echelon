@@ -6,7 +6,7 @@ RUN cargo install cargo-chef
 
 # Planner stage to analyze dependencies
 FROM chef AS planner
-COPY . .
+COPY packages/echelon-server .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Builder stage to compile the application
@@ -19,10 +19,10 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy source code last (most likely to change)
-COPY . .
+COPY packages/echelon-server .
 
 # Build the application
-RUN cargo build --release --package echelon-server
+RUN cargo build --release
 
 FROM debian:trixie-slim AS runtime
 

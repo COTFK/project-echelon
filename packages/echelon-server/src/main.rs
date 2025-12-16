@@ -14,6 +14,7 @@ use crate::worker::cleanup;
 use crate::worker::worker;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
+use axum::http::Method;
 use axum::routing::get;
 use axum::routing::post;
 use commands::start_xvfb;
@@ -21,8 +22,9 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_http::cors::{Any, CorsLayer};
 use ulid::Ulid;
 
 #[tokio::main]
@@ -112,6 +114,12 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
             .expect("Failed to build rate limiter config"),
     );
 
+    let cors = CorsLayer::new()
+        // allow `GET` and `POST` when accessing the resource
+        .allow_methods([Method::GET, Method::POST])
+        // allow requests from any origin
+        .allow_origin(Any);
+
     // Rate-limited upload route (nested router so rate limit only applies here)
     let upload_router = Router::new()
         .route("/upload", post(upload))
@@ -124,6 +132,7 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
         .route("/status/{id}", get(status))
         .route("/download/{id}", get(download))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10 MB limit
+        .layer(cors)
         .with_state(state)
 }
 
