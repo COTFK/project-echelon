@@ -40,6 +40,8 @@ pub async fn launch_edopro(replay_file_path: &str) -> anyhow::Result<Child> {
 
 /// Start recording the display using ffmpeg.
 pub async fn record_display(output_file: &str) -> anyhow::Result<Child> {
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
     let recording_width = SCREEN_WIDTH - SIDEBAR_OFFSET;
     tracing::debug!(
         "Starting ffmpeg recording: {}x{} from display {} to '{}'",
