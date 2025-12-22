@@ -220,7 +220,7 @@ async fn monitor_replay(
 
                 // Handle completion: download video and send final message
                 if matches!(status, ReplayStatus::Done) {
-                    send_video_message(&channel_id, &http, &server_url, &id, requester_id).await;
+                    send_video_message(&channel_id, &http, &server_url, &id, requester_id, status_msg_id).await;
                     break;
                 }
 
@@ -277,14 +277,20 @@ async fn monitor_replay(
     }
 }
 
-/// Sends the completed replay video to the Discord channel.
+/// Sends the completed replay video to the Discord channel and deletes the status message.
 async fn send_video_message(
     channel_id: &serenity::all::ChannelId,
     http: &std::sync::Arc<serenity::http::Http>,
     server_url: &str,
     id: &str,
     requester_id: serenity::all::UserId,
+    status_msg_id: serenity::all::MessageId,
 ) {
+    // Delete the status message
+    if let Err(e) = channel_id.delete_message(http, status_msg_id).await {
+        warn!("Failed to delete status message: {e}");
+    }
+
     match download_video(server_url, id).await {
         Ok(video_data) => {
             let filename = format!("{id}.mp4");
