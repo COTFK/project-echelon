@@ -7,6 +7,7 @@ use serenity::prelude::*;
 use std::env;
 use std::time::{Duration, Instant};
 use tokio::time::interval;
+use tracing::{debug, error, info, warn};
 
 mod api;
 use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file};
@@ -48,7 +49,7 @@ impl EventHandler for Handler {
                 .reply(&ctx, "👋 Hi! Send me a .yrpX file to get started.")
                 .await
             {
-                eprintln!("Failed to send help message: {e}");
+                error!("Failed to send help message: {e}");
             }
             return;
         }
@@ -64,10 +65,9 @@ impl EventHandler for Handler {
     }
 
     async fn ready(&self, ctx: Context, _: Ready) {
-        println!("✅ Bot is online!");
+        info!("✅ Bot is online!");
 
-        let activity =
-            serenity::all::ActivityData::custom("Tag/message me with a replay!");
+        let activity = serenity::all::ActivityData::custom("Tag/message me with a replay!");
         ctx.set_presence(Some(activity), OnlineStatus::Online);
     }
 }
@@ -80,17 +80,22 @@ impl Handler {
         msg: &Message,
         attachment: &serenity::model::prelude::Attachment,
     ) {
-        println!("Processing file: {}", attachment.filename);
+        debug!("Processing file: {}", attachment.filename);
 
         // Download the file from Discord
         match attachment.download().await {
             Ok(data) => {
-                println!("Downloaded {} bytes", data.len());
+                debug!("Downloaded {} bytes", data.len());
                 self.upload_and_monitor(ctx, msg, data).await;
             }
             Err(e) => {
-                eprintln!("Failed to download attachment: {e}");
-                let _ = msg.reply(ctx, "❌ Failed to download file.").await;
+                error!("Failed to download attachment: {e}");
+                let error_msg = if e.to_string().contains("timeout") {
+                    "❌ Download timed out. The file might be too large or the connection is slow. Please try again."
+                } else {
+                    "❌ Failed to download the file from Discord. Please check the file size and try again."
+                };
+                let _ = msg.reply(ctx, error_msg).await;
             }
         }
     }
@@ -113,7 +118,15 @@ impl Handler {
                 tokio::spawn(monitor_replay(server_url, id, channel_id, http));
             }
             Err(e) => {
-                let _ = msg.reply(ctx, format!("❌ Failed to upload: {e}")).await;
+                error!("Failed to upload replay: {e}");
+                let error_msg = if e.contains("500") {
+                    "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
+                } else if e.contains("Request failed") {
+                    "❌ Failed to reach the processing server. Please check your internet connection and try again."
+                } else {
+                    &format!("❌ Upload failed: {e}")
+                };
+                let _ = msg.reply(ctx, error_msg).await;
             }
         }
     }
@@ -170,7 +183,7 @@ async fn monitor_replay(
                 if should_update {
                     let message = format!("[`{id}`] {}", format_status(&status));
                     if let Err(e) = channel_id.say(&http, &message).await {
-                        eprintln!("Failed to send status update: {e}");
+                        error!("Failed to send status update: {e}");
                     }
                     last_update = Instant::now();
                 }
@@ -183,12 +196,22 @@ async fn monitor_replay(
                 last_status = Some(status);
             }
             Err(e) => {
-                eprintln!("Failed to get replay status: {e}");
+                warn!("Failed to get replay status: {e}");
                 // Only notify user if we haven't heard from server in a while
                 if last_update.elapsed() >= Duration::from_secs(STALE_STATUS_THRESHOLD_SECS) {
-                    let message = format!("[`{id}`] ⚠️ Unable to get status: {e}");
-                    if let Err(e) = channel_id.say(&http, &message).await {
-                        eprintln!("Failed to send error update: {e}");
+                    let status_message = if e.contains("404") || e.contains("Not found") {
+                        format!(
+                            "[`{id}`] ❓ Replay not found on server. It may have expired or been deleted."
+                        )
+                    } else if e.contains("Request failed") {
+                        format!(
+                            "[`{id}`] ⚠️ Lost connection to processing server. It will resume when service is available."
+                        )
+                    } else {
+                        format!("[`{id}`] ⚠️ Unable to get status updates: {e}")
+                    };
+                    if let Err(e) = channel_id.say(&http, &status_message).await {
+                        error!("Failed to send error update: {e}");
                     }
                     break;
                 }
@@ -218,14 +241,25 @@ async fn send_video_message(
                 )
                 .await
             {
-                Ok(_) => println!("Sent video for replay {id}"),
-                Err(e) => eprintln!("Failed to send video message: {e}"),
+                Ok(_) => info!("Sent video for replay {id}"),
+                Err(e) => error!("Failed to send video message: {e}"),
             }
         }
         Err(e) => {
-            let message = format!("[`{id}`] ✅ Video is ready but download failed: {e}");
-            if let Err(e) = channel_id.say(http, &message).await {
-                eprintln!("Failed to send final message: {e}");
+            error!("Failed to download video: {e}");
+            let error_msg = if e.contains("404") {
+                format!(
+                    "[`{id}`] ❌ Video generation failed or has expired. Please re-upload the replay to try again."
+                )
+            } else if e.contains("Request failed") {
+                format!(
+                    "[`{id}`] ⚠️ Unable to download the completed video. The processing server is unreachable."
+                )
+            } else {
+                format!("[`{id}`] ⚠️ Replay processed but video download failed: {e}")
+            };
+            if let Err(e) = channel_id.say(http, &error_msg).await {
+                error!("Failed to send final message: {e}");
             }
         }
     }
@@ -233,8 +267,13 @@ async fn send_video_message(
 
 #[tokio::main]
 async fn main() {
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
+
     // Load environment variables - used for various config purposes
     _ = dotenvy::dotenv();
+
+    info!("Starting Discord bot...");
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not set");
     let intents = GatewayIntents::DIRECT_MESSAGES
@@ -247,6 +286,6 @@ async fn main() {
         .expect("Failed to create client");
 
     if let Err(why) = client.start().await {
-        eprintln!("Client error: {why}");
+        error!("Client error: {why}");
     }
 }

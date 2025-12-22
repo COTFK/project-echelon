@@ -1,10 +1,10 @@
-use echelon_discord::api::{download_video, get_replay_status, upload_file, ReplayStatus};
+use echelon_discord::api::{ReplayStatus, download_video, get_replay_status, upload_file};
 
 #[test]
 fn test_replay_status_parsing_queued() {
     let json = r#"{"status":"queued","position":5}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
-    
+
     match status {
         ReplayStatus::Queued { position } => assert_eq!(position, 5),
         _ => panic!("Expected Queued status"),
@@ -15,9 +15,9 @@ fn test_replay_status_parsing_queued() {
 fn test_replay_status_parsing_processing() {
     let json = r#"{"status":"processing"}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
-    
+
     match status {
-        ReplayStatus::Processing => {},
+        ReplayStatus::Processing => {}
         _ => panic!("Expected Processing status"),
     }
 }
@@ -26,9 +26,9 @@ fn test_replay_status_parsing_processing() {
 fn test_replay_status_parsing_done() {
     let json = r#"{"status":"done"}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
-    
+
     match status {
-        ReplayStatus::Done => {},
+        ReplayStatus::Done => {}
         _ => panic!("Expected Done status"),
     }
 }
@@ -37,7 +37,7 @@ fn test_replay_status_parsing_done() {
 fn test_replay_status_parsing_error() {
     let json = r#"{"status":"error","message":"Something went wrong"}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
-    
+
     match status {
         ReplayStatus::Error { message } => assert_eq!(message, "Something went wrong"),
         _ => panic!("Expected Error status"),
@@ -48,7 +48,7 @@ fn test_replay_status_parsing_error() {
 fn test_replay_status_parsing_not_found() {
     let json = r#"{"status":"not_found","message":"Replay not found"}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
-    
+
     match status {
         ReplayStatus::NotFound { message } => assert_eq!(message, "Replay not found"),
         _ => panic!("Expected NotFound status"),
@@ -58,7 +58,7 @@ fn test_replay_status_parsing_not_found() {
 #[tokio::test]
 async fn test_upload_file_success() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let mock = server
         .mock("POST", "/upload")
         .with_status(200)
@@ -77,7 +77,7 @@ async fn test_upload_file_success() {
 #[tokio::test]
 async fn test_upload_file_server_error() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let _mock = server
         .mock("POST", "/upload")
         .with_status(500)
@@ -94,7 +94,7 @@ async fn test_upload_file_server_error() {
 #[tokio::test]
 async fn test_get_replay_status_success() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let _mock = server
         .mock("GET", "/status/test-id")
         .with_status(200)
@@ -106,7 +106,7 @@ async fn test_get_replay_status_success() {
 
     assert!(result.is_ok());
     match result.unwrap() {
-        ReplayStatus::Processing => {},
+        ReplayStatus::Processing => {}
         _ => panic!("Expected Processing status"),
     }
 }
@@ -114,7 +114,7 @@ async fn test_get_replay_status_success() {
 #[tokio::test]
 async fn test_get_replay_status_not_found() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let _mock = server
         .mock("GET", "/status/nonexistent")
         .with_status(404)
@@ -130,7 +130,7 @@ async fn test_get_replay_status_not_found() {
 #[tokio::test]
 async fn test_download_video_success() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let video_data = vec![0xFF, 0xD8, 0xFF, 0xE0]; // JPEG magic bytes
     let _mock = server
         .mock("GET", "/download/test-id")
@@ -148,7 +148,7 @@ async fn test_download_video_success() {
 #[tokio::test]
 async fn test_download_video_not_found() {
     let mut server = mockito::Server::new_async().await;
-    
+
     let _mock = server
         .mock("GET", "/download/nonexistent")
         .with_status(404)
