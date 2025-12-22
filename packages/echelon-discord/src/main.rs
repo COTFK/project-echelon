@@ -6,14 +6,14 @@ use serenity::model::channel::Message;
 use serenity::prelude::*;
 use std::env;
 use std::time::{Duration, Instant};
-use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
 mod api;
 use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file};
 
 // Configuration constants
-const POLL_INTERVAL_SECS: u64 = 5;
+const POLL_INTERVAL_PROCESSING_SECS: u64 = 2; // Poll every 5s during processing
+const POLL_INTERVAL_DEFAULT_SECS: u64 = 10; // Poll every 10s for other states
 const STALE_STATUS_THRESHOLD_SECS: u64 = 60;
 
 struct Handler;
@@ -107,15 +107,29 @@ impl Handler {
 
         match upload_file(&upload_url, &data).await {
             Ok(id) => {
-                // Acknowledge the upload
-                let _ = msg
+                // Acknowledge the upload and get the message ID
+                match msg
                     .reply(ctx, format!("[`{}`] 📋 Replay queued!", id))
-                    .await;
-
-                // Spawn background task to monitor replay status
-                let channel_id = msg.channel_id;
-                let http = ctx.http.clone();
-                tokio::spawn(monitor_replay(server_url, id, channel_id, http));
+                    .await
+                {
+                    Ok(status_msg) => {
+                        // Spawn background task to monitor and update the status message
+                        let channel_id = msg.channel_id;
+                        let http = ctx.http.clone();
+                        let requester_id = msg.author.id;
+                        tokio::spawn(monitor_replay(
+                            server_url,
+                            id,
+                            channel_id,
+                            status_msg.id,
+                            requester_id,
+                            http,
+                        ));
+                    }
+                    Err(e) => {
+                        error!("Failed to send queue confirmation: {e}");
+                    }
+                }
             }
             Err(e) => {
                 error!("Failed to upload replay: {e}");
@@ -132,13 +146,25 @@ impl Handler {
     }
 }
 
-/// Formats a replay status into a user-friendly message.
-fn format_status(status: &ReplayStatus) -> String {
+/// Returns a braille spinner character for animation based on frame count.
+fn get_braille_spinner(frame: usize) -> char {
+    const SPINNER: &[char] = &['⠋', '⠙', '⠴', '⠦'];
+    SPINNER[frame % SPINNER.len()]
+}
+
+/// Formats a replay status into a user-friendly message with optional animation frame.
+fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> String {
     match status {
         ReplayStatus::Queued { position } => {
             format!("⏳ Queued at position {position}")
         }
-        ReplayStatus::Processing => "🔄 Currently processing...".to_string(),
+        ReplayStatus::Processing => {
+            if let Some(frame) = animation_frame {
+                format!("{} Currently processing...", get_braille_spinner(frame))
+            } else {
+                "⠋ Currently processing...".to_string()
+            }
+        }
         ReplayStatus::Done => "✅ Replay is ready!".to_string(),
         ReplayStatus::Error { message } => format!("❌ Error: {message}"),
         ReplayStatus::NotFound { message } => format!("❓ Not found: {message}"),
@@ -147,21 +173,40 @@ fn format_status(status: &ReplayStatus) -> String {
 
 /// Monitors the status of a replay and sends updates to the Discord channel.
 ///
-/// Polls the server every POLL_INTERVAL_SECS and sends updates when:
+/// Polls the server with adaptive intervals based on queue position:
+/// - Position 1 (next to process): every 2 seconds
+/// - Position > 1 (waiting): every 10 seconds
+/// - Processing: every 5 seconds for animation
+/// - Other states: every 10 seconds
+///
+/// Also edits the status message when:
 /// - The status changes (e.g., queued -> processing)
 /// - STALE_STATUS_THRESHOLD_SECS have passed without a change (shows bot is alive)
 async fn monitor_replay(
     server_url: String,
     id: String,
     channel_id: serenity::all::ChannelId,
+    status_msg_id: serenity::all::MessageId,
+    requester_id: serenity::all::UserId,
     http: std::sync::Arc<serenity::http::Http>,
 ) {
-    let mut ticker = interval(Duration::from_secs(POLL_INTERVAL_SECS));
     let mut last_status: Option<ReplayStatus> = None;
     let mut last_update = Instant::now();
+    let mut update_count: usize = 0;
 
     loop {
-        ticker.tick().await;
+        // Determine polling interval based on current status
+        let poll_interval_secs = if let Some(ref status) = last_status {
+            match status {
+                ReplayStatus::Processing => POLL_INTERVAL_PROCESSING_SECS,
+                _ => POLL_INTERVAL_DEFAULT_SECS,
+            }
+        } else {
+            // First poll: check quickly
+            POLL_INTERVAL_PROCESSING_SECS
+        };
+
+        tokio::time::sleep(Duration::from_secs(poll_interval_secs)).await;
 
         match get_replay_status(&server_url, &id).await {
             Ok(status) => {
@@ -175,17 +220,29 @@ async fn monitor_replay(
 
                 // Handle completion: download video and send final message
                 if matches!(status, ReplayStatus::Done) {
-                    send_video_message(&channel_id, &http, &server_url, &id).await;
+                    send_video_message(&channel_id, &http, &server_url, &id, requester_id).await;
                     break;
                 }
 
-                // Send status update for other statuses
-                if should_update {
-                    let message = format!("[`{id}`] {}", format_status(&status));
-                    if let Err(e) = channel_id.say(&http, &message).await {
-                        error!("Failed to send status update: {e}");
+                // Send status update for other statuses (edit the existing message)
+                // Always animate spinner during Processing, update on status change or stale
+                if matches!(status, ReplayStatus::Processing) || should_update {
+                    let message =
+                        format!("[`{id}`] {}", format_status(&status, Some(update_count)));
+                    if let Err(e) = channel_id
+                        .edit_message(
+                            &http,
+                            status_msg_id,
+                            serenity::builder::EditMessage::new().content(message),
+                        )
+                        .await
+                    {
+                        error!("Failed to edit status update: {e}");
                     }
-                    last_update = Instant::now();
+                    if should_update {
+                        last_update = Instant::now();
+                    }
+                    update_count += 1;
                 }
 
                 // Stop monitoring on error
@@ -226,6 +283,7 @@ async fn send_video_message(
     http: &std::sync::Arc<serenity::http::Http>,
     server_url: &str,
     id: &str,
+    requester_id: serenity::all::UserId,
 ) {
     match download_video(server_url, id).await {
         Ok(video_data) => {
@@ -234,7 +292,10 @@ async fn send_video_message(
                 .send_message(
                     http,
                     serenity::builder::CreateMessage::new()
-                        .content(format!("[`{id}`] ✅ Replay is ready!"))
+                        .content(format!(
+                            "{} [`{id}`] ✅ Replay is ready!",
+                            requester_id.mention()
+                        ))
                         .add_file(serenity::builder::CreateAttachment::bytes(
                             video_data, filename,
                         )),
