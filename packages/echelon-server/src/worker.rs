@@ -2,6 +2,7 @@
 
 use crate::commands::launch_edopro;
 use crate::commands::record_display;
+use crate::commands::trim_black_frames;
 use crate::types::Replay;
 use crate::types::ReplayStatus;
 use axum::body::Bytes;
@@ -120,7 +121,7 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
 
     // Wait for EDOPro to initialize
-    sleep(Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(50)).await;
 
     // Start recording the display
     tracing::info!("[{}] Starting display recording...", id);
@@ -144,13 +145,25 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     _ = kill(unistd::Pid::from_raw(pid.cast_signed()), SIGINT);
     _ = ffmpeg_child.wait().await;
 
-    // Load file into memory and clear replay data to free memory
-    let video_data = tokio::fs::read(&output_file)
+    // Trim black frames from the video
+    tracing::info!("[{}] Trimming black frames from video...", id);
+    let trimmed_file_name = format!("{id}_trimmed.mp4");
+    let trimmed_file = tmp_dir.path().join(trimmed_file_name);
+    let trimmed_path_str = trimmed_file
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid trimmed file path"))?;
+    
+    trim_black_frames(output_path_str, trimmed_path_str)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to read recorded video file: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to trim black frames: {e}"))?;
+
+    // Load trimmed file into memory and clear replay data to free memory
+    let video_data = tokio::fs::read(&trimmed_file)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read trimmed video file: {e}"))?;
     let video_size = video_data.len();
     tracing::info!(
-        "[{}] Video recorded successfully. Size: {} bytes ({:.2} MB).",
+        "[{}] Video trimmed successfully. Size: {} bytes ({:.2} MB).",
         id,
         video_size,
         video_size as f64 / (1024.0 * 1024.0)
