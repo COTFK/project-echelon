@@ -6,10 +6,11 @@ A [reference deployment] is available for testing. **Currently a very rough WIP 
 [reference deployment]: https://echelon.arqalite.org/
 
 ## Packages
-The project currently maintains two packages:
+The project currently maintains three packages:
 
-- [echelon-server](packages/echelon-server) - a Rust+Axum server that handles the conversion
-- [echelon-webui](packages/echelon-webui) - a web UI (in Rust+Dioxus) to interface with the server
+- [echelon-server](packages/echelon-server) - the server itself (Rust + Axum)
+- [echelon-webui](packages/echelon-webui) - a web frontend (Rust + Dioxus)
+- [echelon-discord](packages/echelon-discord) - a Discord bot frontend (Rust + Serenity) 
 
 ## Contributing
 We accept contributions! Submit your patches (or request repository access) in the [Fire King Discord server](https://discord.gg/8JtxHUAdGq).

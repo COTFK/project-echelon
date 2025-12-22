@@ -27,3 +27,8 @@ services:
           path: ./packages/echelon-webui/src
     ports:
       - "8080:80"
+
+  discord:
+    build:
+      dockerfile: ./discord.Dockerfile
+    env_file: .env

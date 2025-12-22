@@ -1,3 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["packages/echelon-server", "packages/echelon-webui"]
+members = ["packages/echelon-discord","packages/echelon-server", "packages/echelon-webui"]
