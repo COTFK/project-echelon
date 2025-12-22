@@ -3,9 +3,6 @@ mod routes;
 mod types;
 mod worker;
 
-#[cfg(test)]
-mod tests;
-
 use crate::routes::download;
 use crate::routes::status;
 use crate::routes::upload;

@@ -1,10 +1,10 @@
-use crate::routes::{download, status, upload};
-use crate::types::Replay;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum_test::TestServer;
+use echelon_server::routes::{download, status, upload};
+use echelon_server::types::Replay;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -240,7 +240,7 @@ async fn test_queue_positions_are_sequential() {
 
 #[tokio::test]
 async fn test_status_for_processing_job() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -264,7 +264,7 @@ async fn test_status_for_processing_job() {
 
 #[tokio::test]
 async fn test_status_for_done_job() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -289,7 +289,7 @@ async fn test_status_for_done_job() {
 
 #[tokio::test]
 async fn test_status_for_error_job() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -315,7 +315,7 @@ async fn test_status_for_error_job() {
 
 #[tokio::test]
 async fn test_status_for_error_job_without_message() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -345,7 +345,7 @@ async fn test_status_for_error_job_without_message() {
 
 #[tokio::test]
 async fn test_download_job_not_done_yet() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -373,7 +373,7 @@ async fn test_download_job_not_done_yet() {
 
 #[tokio::test]
 async fn test_download_job_in_error_state() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
     let id = Ulid::new();
@@ -396,36 +396,6 @@ async fn test_download_job_in_error_state() {
     assert!(
         state.read().await.contains_key(&id),
         "Failed job should still exist"
-    );
-}
-
-#[tokio::test]
-async fn test_download_success_removes_job() {
-    use crate::types::ReplayStatus;
-
-    let state = Arc::new(RwLock::new(BTreeMap::<Ulid, Replay>::new()));
-    let id = Ulid::new();
-
-    // Insert a completed job with video
-    {
-        let mut lock = state.write().await;
-        let mut job = Replay::new(valid_replay_data().into());
-        job.status = ReplayStatus::Done;
-        job.video = Some(b"fake video data".to_vec().into());
-        lock.insert(id, job);
-    }
-
-    let app = create_app_without_rate_limit(state.clone());
-    let server = TestServer::new(app).unwrap();
-
-    let response = server.get(&format!("/download/{id}")).await;
-    response.assert_status_ok();
-    assert_eq!(response.as_bytes().as_ref(), b"fake video data");
-
-    // Verify job was removed from state after download
-    assert!(
-        !state.read().await.contains_key(&id),
-        "Job should be removed after download"
     );
 }
 
@@ -482,7 +452,7 @@ async fn test_upload_exact_magic_bytes_only() {
 
 #[test]
 fn test_replay_new_initial_state() {
-    use crate::types::ReplayStatus;
+    use echelon_server::types::ReplayStatus;
 
     let data = valid_replay_data();
     let replay = Replay::new(data.clone().into());

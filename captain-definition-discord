@@ -1,4 +1,4 @@
 {
-"schemaVersion": 2,
-"dockerfilePath": "./discord.Dockerfile"
+    "schemaVersion": 2,
+    "dockerfilePath": "./discord.Dockerfile"
 }
