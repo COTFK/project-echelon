@@ -352,7 +352,24 @@ async fn main() {
         .await
         .expect("Failed to create client");
 
+    // Clone shard manager for signal handling
+    let shard_manager = client.shard_manager.clone();
+
+    // Spawn signal handler task
+    tokio::spawn(async move {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+                info!("Received SIGTERM, shutting down gracefully...");
+                shard_manager.shutdown_all().await;
+            }
+            Err(e) => error!("Failed to set up signal handler: {e}"),
+        }
+    });
+
     if let Err(why) = client.start().await {
         error!("Client error: {why}");
     }
+
+    info!("Bot has shut down.");
 }
