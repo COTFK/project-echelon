@@ -5,10 +5,21 @@
 mod api;
 mod components;
 mod types;
+mod pages;
 
 use dioxus::prelude::*;
 
-use components::{Footer, NavBar, UploadForm};
+use pages::UploadPage;
+use pages::PrivacyPolicyPage;
+
+#[derive(Clone, Debug, PartialEq, Routable)]
+enum Route {
+    #[route("/")]
+    UploadPage,
+
+    #[route("/privacy-policy")]
+    PrivacyPolicyPage
+}
 
 fn main() {
     dioxus::launch(App);
@@ -25,9 +36,7 @@ fn App() -> Element {
         div {
             class: "relative flex flex-col h-dvh w-dvw overflow-x-hidden overflow-y-auto",
             "data-theme": "business",
-            NavBar {}
-            UploadForm {}
-            Footer {}
+            Router::<Route> {}
         }
     }
 }

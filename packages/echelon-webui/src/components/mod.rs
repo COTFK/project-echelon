@@ -6,8 +6,10 @@ mod navbar;
 mod status_display;
 mod upload_form;
 mod video_preview;
+mod privacy_policy;
 
 pub use footer::Footer;
 pub use hero::Hero;
 pub use navbar::NavBar;
 pub use upload_form::UploadForm;
+pub use privacy_policy::PrivacyPolicy;
