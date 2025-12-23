@@ -121,6 +121,21 @@ pub fn UploadForm() -> Element {
                             label { class: "label pt-2", "*{REPLAY_EXTENSION} file, max size 10MB" }
                         }
                         button { class: "btn btn-primary", r#type: "submit", "Convert" }
+                        p { class: "text-xs text-center opacity-60 mt-2",
+                            "By uploading, you agree to our "
+                            a {
+                                href: "/terms",
+                                class: "link",
+                                "Terms of Service"
+                            }
+                            " and "
+                            a {
+                                href: "/privacy",
+                                class: "link",
+                                "Privacy Policy"
+                            }
+                            "."
+                        }
                     } else if matches!(status(), ReplayStatus::Completed(_)) {
                         legend { class: "fieldset-legend text-base", "Done!" }
                         button {

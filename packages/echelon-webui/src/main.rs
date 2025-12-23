@@ -18,10 +18,10 @@ enum Route {
     #[route("/")]
     UploadPage,
 
-    #[route("/privacy-policy")]
+    #[route("/privacy")]
     PrivacyPolicyPage,
 
-    #[route("/terms-of-service")]
+    #[route("/terms")]
     TermsOfServicePage,
 }
 
