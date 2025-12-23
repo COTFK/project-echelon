@@ -11,6 +11,7 @@ use dioxus::prelude::*;
 
 use pages::UploadPage;
 use pages::PrivacyPolicyPage;
+use pages::TermsOfServicePage;
 
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {
@@ -18,7 +19,10 @@ enum Route {
     UploadPage,
 
     #[route("/privacy-policy")]
-    PrivacyPolicyPage
+    PrivacyPolicyPage,
+
+    #[route("/terms-of-service")]
+    TermsOfServicePage,
 }
 
 fn main() {
