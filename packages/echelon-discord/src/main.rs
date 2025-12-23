@@ -1,5 +1,6 @@
 use serenity::all::OnlineStatus;
 use serenity::all::Ready;
+use serenity::all::{CommandInteraction, Interaction};
 use serenity::async_trait;
 use serenity::client::{Client, Context, EventHandler};
 use serenity::model::channel::Message;
@@ -20,6 +21,14 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::Command(command) = interaction {
+            if command.data.name == "echelon" {
+                self.handle_echelon_command(&ctx, &command).await;
+            }
+        }
+    }
+
     async fn message(&self, ctx: Context, msg: Message) {
         // Ignore bot's own messages
         if msg.author.bot {
@@ -67,12 +76,167 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: Ready) {
         info!("✅ Bot is online!");
 
-        let activity = serenity::all::ActivityData::custom("Tag/message me with a replay!");
+        // Register slash command
+        match serenity::all::Command::create_global_command(&ctx.http, {
+            serenity::builder::CreateCommand::new("echelon")
+                .description("Convert your EDOPro replay to video")
+                .add_option(
+                    serenity::builder::CreateCommandOption::new(
+                        serenity::all::CommandOptionType::SubCommand,
+                        "convert",
+                        "Upload a replay file to convert",
+                    )
+                    .add_sub_option(
+                        serenity::builder::CreateCommandOption::new(
+                            serenity::all::CommandOptionType::Attachment,
+                            "file",
+                            "Your .yrpX replay file (max 10MB)",
+                        )
+                        .required(true),
+                    ),
+                )
+        })
+        .await
+        {
+            Ok(_) => info!("✅ Slash command '/echelon' registered"),
+            Err(e) => error!("Failed to register slash command: {e}"),
+        }
+
+        let activity = serenity::all::ActivityData::custom("Use /echelon or send me a replay!");
         ctx.set_presence(Some(activity), OnlineStatus::Online);
     }
 }
 
 impl Handler {
+    /// Handles the /echelon slash command.
+    async fn handle_echelon_command(&self, ctx: &Context, command: &CommandInteraction) {
+        // Defer the response immediately
+        if let Err(e) = command.defer(&ctx.http).await {
+            error!("Failed to defer command response: {e}");
+            return;
+        }
+
+        // Get the subcommand's options (file parameter is nested under "upload" subcommand)
+        let file_attachment = command
+            .data
+            .options
+            .iter()
+            .find_map(|opt| {
+                if opt.name == "convert" {
+                    // This is a subcommand, need to get the nested options
+                    if let serenity::all::CommandDataOptionValue::SubCommand(sub_opts) = &opt.value {
+                        // Find the file option within the subcommand options
+                        sub_opts.iter().find_map(|sub_opt| {
+                            if sub_opt.name == "file" {
+                                match &sub_opt.value {
+                                    serenity::all::CommandDataOptionValue::Attachment(id) => {
+                                        command.data.resolved.attachments.get(id).cloned()
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
+
+        let Some(attachment) = file_attachment else {
+            let _ = command
+                .edit_response(&ctx.http, serenity::builder::EditInteractionResponse::new()
+                    .content("❌ No file attachment provided"))
+                .await;
+            return;
+        };
+
+        // Validate file extension
+        if !attachment.filename.ends_with(".yrpX") {
+            let _ = command
+                .edit_response(&ctx.http, serenity::builder::EditInteractionResponse::new()
+                    .content("❌ Please upload a `.yrpX` replay file"))
+                .await;
+            return;
+        }
+
+        // Download the file
+        match attachment.download().await {
+            Ok(data) => {
+                debug!("Downloaded {} bytes via slash command", data.len());
+
+                // Upload to server and get ID
+                let server_url = get_server_url();
+                let upload_url = format!("{}/upload", server_url);
+
+                match upload_file(&upload_url, &data).await {
+                    Ok(id) => {
+                        // Send initial response
+                        if let Err(e) = command
+                            .edit_response(&ctx.http, serenity::builder::EditInteractionResponse::new()
+                                .content(format!("[`{}`] 📋 Replay queued!", id)))
+                            .await
+                        {
+                            error!("Failed to edit command response: {e}");
+                            return;
+                        }
+
+                        // Get the response message to update it with status
+                        match command.get_response(&ctx.http).await {
+                            Ok(status_msg) => {
+                                let channel_id = command.channel_id;
+                                let http = ctx.http.clone();
+                                let requester_id = command.user.id;
+
+                                // Spawn background task to monitor and update the status message
+                                tokio::spawn(monitor_replay(
+                                    server_url,
+                                    id,
+                                    channel_id,
+                                    status_msg.id,
+                                    requester_id,
+                                    http,
+                                ));
+                            }
+                            Err(e) => {
+                                error!("Failed to get response message: {e}");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to upload replay: {e}");
+                        let error_msg = if e.contains("500") {
+                            "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
+                        } else if e.contains("Request failed") {
+                            "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
+                        } else {
+                            "❌ Upload failed. Please try again."
+                        };
+                        let _ = command
+                            .edit_response(&ctx.http, serenity::builder::EditInteractionResponse::new()
+                                .content(error_msg))
+                            .await;
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to download attachment: {e}");
+                let error_msg = if e.to_string().contains("timeout") {
+                    "❌ Download timed out. The file might be too large or the connection is slow. Please try again."
+                } else {
+                    "❌ Failed to download the file. Please check the file size and try again."
+                };
+                let _ = command
+                    .edit_response(&ctx.http, serenity::builder::EditInteractionResponse::new()
+                        .content(error_msg))
+                    .await;
+            }
+        }
+    }
+
     /// Processes a single replay file attachment.
     async fn process_replay(
         &self,
