@@ -1,15 +1,18 @@
-use serenity::all::OnlineStatus;
-use serenity::all::Ready;
-use serenity::all::{CommandInteraction, Interaction};
+use serenity::all::{
+    ChannelId, CommandInteraction, Interaction, MessageId, OnlineStatus, Ready, UserId,
+};
 use serenity::async_trait;
 use serenity::client::{Client, Context, EventHandler};
 use serenity::prelude::*;
 use std::env;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 mod api;
 use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file};
+
+type Http = Arc<serenity::http::Http>;
 
 // Configuration constants
 const POLL_INTERVAL_PROCESSING_SECS: u64 = 3; // Poll every 5s during processing
@@ -64,7 +67,9 @@ impl EventHandler for Handler {
 
 impl Handler {
     /// Extracts the replay file attachment from a slash command.
-    fn extract_file_attachment(command: &CommandInteraction) -> Option<serenity::model::prelude::Attachment> {
+    fn extract_file_attachment(
+        command: &CommandInteraction,
+    ) -> Option<serenity::model::prelude::Attachment> {
         command.data.options.iter().find_map(|opt| {
             if opt.name == "convert" {
                 // This is a subcommand, need to get the nested options
@@ -89,11 +94,6 @@ impl Handler {
                 None
             }
         })
-    }
-
-    /// Validates that the attachment is a replay file (.yrpX).
-    fn validate_replay_file(filename: &str) -> bool {
-        filename.ends_with(".yrpX")
     }
 
     /// Sends an error response to the command interaction.
@@ -122,24 +122,18 @@ impl Handler {
             return;
         };
 
-        // Validate file extension
-        if !Self::validate_replay_file(&attachment.filename) {
+        if !attachment.filename.ends_with(".yrpX") {
             Self::respond_with_error(ctx, command, "❌ Please upload a `.yrpX` replay file").await;
             return;
         }
 
-        // Download the file
         match attachment.download().await {
             Ok(data) => {
-                debug!("Downloaded {} bytes via slash command", data.len());
-
-                // Upload to server and get ID
                 let server_url = get_server_url();
                 let upload_url = format!("{}/upload", server_url);
 
                 match upload_file(&upload_url, &data).await {
                     Ok(id) => {
-                        // Send initial response
                         if let Err(e) = command
                             .edit_response(
                                 &ctx.http,
@@ -152,14 +146,12 @@ impl Handler {
                             return;
                         }
 
-                        // Get the response message to update it with status
                         match command.get_response(&ctx.http).await {
                             Ok(status_msg) => {
                                 let channel_id = command.channel_id;
                                 let http = ctx.http.clone();
                                 let requester_id = command.user.id;
 
-                                // Spawn background task to monitor and update the status message
                                 tokio::spawn(monitor_replay(
                                     server_url,
                                     id,
@@ -200,12 +192,6 @@ impl Handler {
     }
 }
 
-/// Returns a braille spinner character for animation based on frame count.
-fn get_braille_spinner(frame: usize) -> char {
-    const SPINNER: &[char] = &['⠋', '⠙', '⠴', '⠦'];
-    SPINNER[frame % SPINNER.len()]
-}
-
 /// Formats a replay status into a user-friendly message with optional animation frame.
 fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> String {
     match status {
@@ -213,11 +199,8 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
             format!("⏳ Queued at position {position}")
         }
         ReplayStatus::Processing => {
-            if let Some(frame) = animation_frame {
-                format!("{} Currently processing...", get_braille_spinner(frame))
-            } else {
-                "⠋ Currently processing...".to_string()
-            }
+            let spinner = ['⠋', '⠙', '⠴', '⠦'][animation_frame.unwrap_or(0) % 4];
+            format!("{spinner} Currently processing...")
         }
         ReplayStatus::Done => "✅ Replay is ready!".to_string(),
         ReplayStatus::Error { message } => format!("❌ Error: {message}"),
@@ -225,38 +208,25 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
     }
 }
 
-/// Monitors the status of a replay and sends updates to the Discord channel.
-///
-/// Polls the server with adaptive intervals based on queue position:
-/// - Position 1 (next to process): every 2 seconds
-/// - Position > 1 (waiting): every 10 seconds
-/// - Processing: every 5 seconds for animation
-/// - Other states: every 10 seconds
-///
-/// Also edits the status message when:
-/// - The status changes (e.g., queued -> processing)
-/// - STALE_STATUS_THRESHOLD_SECS have passed without a change (shows bot is alive)
 async fn monitor_replay(
     server_url: String,
     id: String,
-    channel_id: serenity::all::ChannelId,
-    status_msg_id: serenity::all::MessageId,
-    requester_id: serenity::all::UserId,
-    http: std::sync::Arc<serenity::http::Http>,
+    channel_id: ChannelId,
+    status_msg_id: MessageId,
+    requester_id: UserId,
+    http: Http,
 ) {
     let mut last_status: Option<ReplayStatus> = None;
     let mut last_update = Instant::now();
     let mut update_count: usize = 0;
 
     loop {
-        // Determine polling interval based on current status
         let poll_interval_secs = if let Some(ref status) = last_status {
             match status {
                 ReplayStatus::Processing => POLL_INTERVAL_PROCESSING_SECS,
                 _ => POLL_INTERVAL_DEFAULT_SECS,
             }
         } else {
-            // First poll: check quickly
             POLL_INTERVAL_PROCESSING_SECS
         };
 
@@ -264,7 +234,6 @@ async fn monitor_replay(
 
         match get_replay_status(&server_url, &id).await {
             Ok(status) => {
-                // Detect status change by comparing debug output
                 let status_changed = last_status
                     .as_ref()
                     .is_none_or(|last| format!("{:?}", last) != format!("{:?}", status));
@@ -272,7 +241,6 @@ async fn monitor_replay(
                 let should_update = status_changed
                     || last_update.elapsed() >= Duration::from_secs(STALE_STATUS_THRESHOLD_SECS);
 
-                // Handle completion: download video and send final message
                 if matches!(status, ReplayStatus::Done) {
                     send_video_message(
                         &channel_id,
@@ -286,8 +254,6 @@ async fn monitor_replay(
                     break;
                 }
 
-                // Send status update for other statuses (edit the existing message)
-                // Always animate spinner during Processing, update on status change or stale
                 if matches!(status, ReplayStatus::Processing) || should_update {
                     let message =
                         format!("[`{id}`] {}", format_status(&status, Some(update_count)));
@@ -307,7 +273,6 @@ async fn monitor_replay(
                     update_count += 1;
                 }
 
-                // Stop monitoring on error
                 if matches!(status, ReplayStatus::Error { .. }) {
                     break;
                 }
@@ -316,7 +281,6 @@ async fn monitor_replay(
             }
             Err(e) => {
                 warn!("Failed to get replay status: {e}");
-                // Only notify user if we haven't heard from server in a while
                 if last_update.elapsed() >= Duration::from_secs(STALE_STATUS_THRESHOLD_SECS) {
                     let status_message = if e.contains("404") || e.contains("Not found") {
                         format!(
@@ -339,16 +303,14 @@ async fn monitor_replay(
     }
 }
 
-/// Sends the completed replay video to the Discord channel and deletes the status message.
 async fn send_video_message(
-    channel_id: &serenity::all::ChannelId,
-    http: &std::sync::Arc<serenity::http::Http>,
+    channel_id: &ChannelId,
+    http: &Http,
     server_url: &str,
     id: &str,
-    requester_id: serenity::all::UserId,
-    status_msg_id: serenity::all::MessageId,
+    requester_id: UserId,
+    status_msg_id: MessageId,
 ) {
-    // Delete the status message
     if let Err(e) = channel_id.delete_message(http, status_msg_id).await {
         warn!("Failed to delete status message: {e}");
     }
@@ -399,7 +361,6 @@ async fn main() {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
-    // Load environment variables - used for various config purposes
     _ = dotenvy::dotenv();
 
     info!("Starting Discord bot...");
