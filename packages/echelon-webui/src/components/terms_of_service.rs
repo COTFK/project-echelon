@@ -14,7 +14,7 @@ pub fn TermsOfService() -> Element {
             // Section 1
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "1. Acceptance of Terms" }
             p {
-                "By using Project Echelon (\"the Service\"), you agree to these Terms of Service. 
+                "By using Project Echelon, also sometimes referred to as Echelon (\"the Service\"), you agree to these Terms of Service. 
                 If you do not agree, please do not use the Service."
             }
 
@@ -23,7 +23,7 @@ pub fn TermsOfService() -> Element {
             p {
                 "Project Echelon is a free service that converts Project Ignis: EDOPro replay files ("
                 code { class: "badge badge-neutral", ".yrpX" }
-                ") into video format. The Service is provided \"as is\" without warranty."
+                ") into MP4 video files. The Service is provided \"as is\" without warranty."
             }
 
             // Section 3
@@ -43,8 +43,8 @@ pub fn TermsOfService() -> Element {
                 Project Echelon does not claim ownership over user-submitted content."
             }
             p { class: "mt-2",
-                "Yu-Gi-Oh! and related content are trademarks of Konami. EDOPro is developed by Project Ignis. 
-                This Service is not affiliated with or endorsed by Konami or Project Ignis."
+                "Any information and content presented on this site about Yu-Gi-Oh! is copyright 4K Media Inc, a subsidiary of Konami Digital Entertainment, Inc. EDOPro is developed by Project Ignis. 
+                This Service is not produced by, endorsed by, supported by, or affiliated with 4K Media Inc., Konami Digital Entertainment Inc, or Project Ignis."
             }
 
             // Section 5

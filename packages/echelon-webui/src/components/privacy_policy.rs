@@ -23,7 +23,7 @@ pub fn PrivacyPolicy() -> Element {
             p {
                 "When you submit a "
                 code { class: "badge badge-neutral", ".yrpX" }
-                " replay file through our Discord bot or web interface, we process the file to generate a video. Replay files may contain:"
+                " replay file through our Discord bot or web interface, we process the file to generate an MP4 video. Replay files may contain:"
             }
             ul { class: "list-disc list-inside ml-4 space-y-1",
                 li { "In-game usernames and player information from the replay" }
@@ -46,7 +46,7 @@ pub fn PrivacyPolicy() -> Element {
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "2. How We Use Your Data" }
             p { "We use the collected data exclusively for:" }
             ul { class: "list-disc list-inside ml-4 space-y-1",
-                li { "Converting your replay files to video format" }
+                li { "Converting your replay files to MP4 video" }
                 li { "Delivering the completed video back to you" }
                 li { "Preventing service abuse through rate limiting" }
             }
@@ -56,7 +56,7 @@ pub fn PrivacyPolicy() -> Element {
                     strong { "We do NOT:" }
                     ul { class: "list-disc list-inside ml-4 mt-2 space-y-1",
                         li { "Sell or share your data with third parties" }
-                        li { "Store replay files or videos permanently (auto-deleted after 1 hour or upon download)" }
+                        li { "Store replay files or videos permanently (auto-deleted after 1 hour)" }
                         li { "Create user accounts or profiles" }
                         li { "Track usage across sessions" }
                         li { "Use cookies or similar tracking technologies" }
@@ -77,11 +77,11 @@ pub fn PrivacyPolicy() -> Element {
                     tbody {
                         tr {
                             td { "Replay files" }
-                            td { "Deleted after video download, or automatically after 1 hour" }
+                            td { "Deleted automatically after 1 hour" }
                         }
                         tr {
                             td { "Generated videos" }
-                            td { "Deleted after download, or automatically after 1 hour" }
+                            td { "Deleted automatically after 1 hour" }
                         }
                         tr {
                             td { "IP addresses" }

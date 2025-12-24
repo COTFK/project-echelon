@@ -55,7 +55,6 @@ Three routes are available:
     - Requests the video file from the server.
     - If status is not `done` it will return a `404 Not Found`.
     - If status is `done`, it will return a `video/mp4` response with the video data.
-    - **Note:** Successfully downloading a video removes it from the server.
 
 ## Docker deployments
 Project Echelon is intended to be deployed in a Docker container; as such, a `server.Dockerfile` and `compose.yaml` representative of our reference deployment are provided in the repository root.
