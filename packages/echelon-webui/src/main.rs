@@ -33,14 +33,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     rsx! {
-        document::Stylesheet { href: "https://cdn.jsdelivr.net/npm/daisyui@5" }
-        document::Stylesheet { href: "https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" }
-        document::Stylesheet { href: "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" }
-        document::Script { src: "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" }
-        div {
-            class: "relative flex flex-col h-dvh w-dvw overflow-x-hidden overflow-y-auto",
-            "data-theme": "business",
-            Router::<Route> {}
-        }
+        document::Stylesheet { href: asset!("/assets/tailwind.css") }
+        Router::<Route> {}
     }
 }

@@ -15,13 +15,13 @@ ENV API_BASE_URL=$API_BASE_URL
 
 # Build the web app
 WORKDIR /app/packages/echelon-webui
-RUN dx build --release
+RUN dx bundle --platform web --release --debug-symbols=false --out-dir bundle
 
 # Runtime stage - serve with nginx
 FROM nginx:alpine AS runtime
 
 # Copy built assets to nginx
-COPY --from=builder /app/packages/echelon-webui/target/dx/echelon-webui/release/web/public /usr/share/nginx/html
+COPY --from=builder /app/packages/echelon-webui/bundle/public /usr/share/nginx/html
 
 # Copy custom nginx config
 COPY --from=builder /app/packages/echelon-webui/config/nginx.conf /etc/nginx/conf.d/default.conf
