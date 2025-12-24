@@ -43,8 +43,11 @@ pub fn TermsOfService() -> Element {
                 Project Echelon does not claim ownership over user-submitted content."
             }
             p { class: "mt-2",
-                "Any information and content presented on this site about Yu-Gi-Oh! is copyright 4K Media Inc, a subsidiary of Konami Digital Entertainment, Inc. EDOPro is developed by Project Ignis. 
-                This Service is not produced by, endorsed by, supported by, or affiliated with 4K Media Inc., Konami Digital Entertainment Inc, or Project Ignis."
+                "Any information and content presented on this site relating to Yu-Gi-Oh! is the intellectual property and copyright of Studio Dice/SHUEISHA, TV TOKYO, and Konami Digital Entertainment. EDOPro is developed by Project Ignis."
+            }
+            p {
+                class: "mt-2",
+                "This service is an independent third-party platform and is not produced by, endorsed by, supported by, or affiliated with Studio Dice/SHUEISHA, TV TOKYO, Konami Digital Entertainment or Project Ignis."
             }
 
             // Section 5
