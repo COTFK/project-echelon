@@ -40,4 +40,8 @@ if [[ -n "$VERSION" ]]; then
     docker push "${REGISTRY}:webui-${VERSION}"
 fi
 
+caprover deploy -i git.arqalite.org/cotfk/project-echelon:server-latest -n arqalite -a echelon-server
+caprover deploy -i git.arqalite.org/cotfk/project-echelon:discord-latest -n arqalite -a echelon-discord
+caprover deploy -i git.arqalite.org/cotfk/project-echelon:webui-latest -n arqalite -a echelon
+
 echo "✅ All images built and pushed successfully!"
