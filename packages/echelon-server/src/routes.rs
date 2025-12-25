@@ -127,7 +127,7 @@ pub async fn status(
         Some(ReplayStatus::Recording) => (StatusCode::OK, Json(StatusResponse::Processing)),
         Some(ReplayStatus::Done) => (StatusCode::OK, Json(StatusResponse::Done)),
         Some(ReplayStatus::Error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::OK,
             Json(StatusResponse::Error {
                 message: error_message.unwrap_or_else(|| String::from("An error has occurred.")),
             }),
