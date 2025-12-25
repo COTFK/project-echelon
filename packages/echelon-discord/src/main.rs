@@ -211,7 +211,7 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
             format!("{spinner} Currently processing...")
         }
         ReplayStatus::Done => "✅ Replay is ready!".to_string(),
-        ReplayStatus::Error { message } => format!("❌ Error: {message}"),
+        ReplayStatus::Error { message } => format!("❌ {message}"),
         ReplayStatus::NotFound { message } => format!("❓ Not found: {message}"),
     }
 }
@@ -284,7 +284,7 @@ async fn monitor_replay(
                 if let ReplayStatus::Error { message } = &status {
                     // Update status message with the error before breaking
                     let error_message = format!(
-                        "[`{id}`] ❌ Processing failed: {message}"
+                        "[`{id}`] ❌ {message}"
                     );
                     if let Err(e) = channel_id
                         .edit_message(

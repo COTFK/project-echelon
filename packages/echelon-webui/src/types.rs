@@ -64,7 +64,7 @@ impl std::fmt::Display for ReplayError {
             }
             Self::QueueFull => write!(f, "Server queue is full. Please try again later."),
             Self::NotFound(msg) => write!(f, "Replay not found: {msg}"),
-            Self::Server(msg) => write!(f, "Server error: {msg}"),
+            Self::Server(msg) => write!(f, "{msg}"),
             Self::Validation(msg) => write!(f, "{msg}"),
         }
     }
