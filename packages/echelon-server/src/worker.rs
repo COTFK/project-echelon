@@ -135,7 +135,8 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
 
     // Wait for EDOPro to exit
-    _ = edopro_process.wait().await;
+    let edopro_exit_status = edopro_process.wait().await
+        .map_err(|e| anyhow::anyhow!("Failed to wait for EDOPro process: {e}"))?;
 
     // Stop the recording
     tracing::info!("[{}] Replay finished. Stopping display recording...", id);
@@ -144,6 +145,17 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .ok_or_else(|| anyhow::anyhow!("Video recording process exited unexpectedly"))?;
     _ = kill(unistd::Pid::from_raw(pid.cast_signed()), SIGINT);
     _ = ffmpeg_child.wait().await;
+
+    // Check if EDOPro exited with an error (e.g., invalid replay file)
+    if !edopro_exit_status.success() {
+        let code = edopro_exit_status
+            .code()
+            .map(|c| format!(" (exit code {c})"))
+            .unwrap_or_default();
+        return Err(anyhow::anyhow!(
+            "EDOPro exited with an error{code}. The replay file may be invalid or corrupted."
+        ));
+    }
 
     // Trim black frames from the video
     tracing::info!("[{}] Trimming black frames from video...", id);
