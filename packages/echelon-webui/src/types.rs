@@ -34,12 +34,6 @@ pub enum ReplayStatus {
 }
 
 impl ReplayStatus {
-    /// Returns `true` if the user can submit a new replay (not actively processing).
-    #[inline]
-    pub const fn can_submit(&self) -> bool {
-        matches!(self, Self::Idle | Self::Error(_))
-    }
-
     /// Returns `true` if we should poll for status updates.
     #[inline]
     pub const fn should_poll(&self) -> bool {
