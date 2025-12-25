@@ -15,9 +15,12 @@ use api::{ReplayStatus, download_video, get_replay_status, get_server_url, uploa
 type Http = Arc<serenity::http::Http>;
 
 // Configuration constants
-const POLL_INTERVAL_PROCESSING_SECS: u64 = 3; // Poll every 5s during processing
+const POLL_INTERVAL_PROCESSING_SECS: u64 = 3; // Poll every 3s during processing
 const POLL_INTERVAL_DEFAULT_SECS: u64 = 10; // Poll every 10s for other states
 const STALE_STATUS_THRESHOLD_SECS: u64 = 60;
+
+/// Discord's file size limit in bytes (10MB for non-Nitro users)
+const DISCORD_FILE_LIMIT_BYTES: usize = 10 * 1024 * 1024;
 
 struct Handler;
 
@@ -163,6 +166,11 @@ impl Handler {
                             }
                             Err(e) => {
                                 error!("Failed to get response message: {e}");
+                                Self::respond_with_error(
+                                    ctx,
+                                    command,
+                                    &format!("[`{id}`] ⚠️ Replay was queued but we couldn't start monitoring. Check back later or try again."),
+                                ).await;
                             }
                         }
                     }
@@ -273,7 +281,23 @@ async fn monitor_replay(
                     update_count += 1;
                 }
 
-                if matches!(status, ReplayStatus::Error { .. }) {
+                if let ReplayStatus::Error { message } = &status {
+                    // Update status message with the error before breaking
+                    let error_message = format!(
+                        "[`{id}`] ❌ Processing failed: {message}"
+                    );
+                    if let Err(e) = channel_id
+                        .edit_message(
+                            &http,
+                            status_msg_id,
+                            serenity::builder::EditMessage::new().content(&error_message),
+                        )
+                        .await
+                    {
+                        error!("Failed to update status message with error: {e}");
+                        // Try sending a new message as fallback
+                        let _ = channel_id.say(&http, &error_message).await;
+                    }
                     break;
                 }
 
@@ -282,19 +306,31 @@ async fn monitor_replay(
             Err(e) => {
                 warn!("Failed to get replay status: {e}");
                 if last_update.elapsed() >= Duration::from_secs(STALE_STATUS_THRESHOLD_SECS) {
-                    let status_message = if e.contains("404") || e.contains("Not found") {
+                    let error_message = if e.contains("404") || e.contains("Not found") {
                         format!(
                             "[`{id}`] ❓ Replay not found on server. It may have expired or been deleted."
                         )
                     } else if e.contains("Request failed") {
                         format!(
-                            "[`{id}`] ⚠️ Lost connection to processing server. It will resume when service is available."
+                            "[`{id}`] ⚠️ Lost connection to processing server. Please try again later."
                         )
                     } else {
                         format!("[`{id}`] ⚠️ Unable to get status updates: {e}")
                     };
-                    if let Err(e) = channel_id.say(&http, &status_message).await {
-                        error!("Failed to send error update: {e}");
+                    // Try to edit the status message first
+                    if let Err(edit_err) = channel_id
+                        .edit_message(
+                            &http,
+                            status_msg_id,
+                            serenity::builder::EditMessage::new().content(&error_message),
+                        )
+                        .await
+                    {
+                        error!("Failed to edit status message: {edit_err}");
+                        // Fallback to sending a new message
+                        if let Err(e) = channel_id.say(&http, &error_message).await {
+                            error!("Failed to send error update: {e}");
+                        }
                     }
                     break;
                 }
@@ -317,6 +353,30 @@ async fn send_video_message(
 
     match download_video(server_url, id).await {
         Ok(video_data) => {
+            let video_size = video_data.len();
+            let video_size_mb = video_size as f64 / (1024.0 * 1024.0);
+
+            // Check if video exceeds Discord's file size limit
+            if video_size > DISCORD_FILE_LIMIT_BYTES {
+                info!(
+                    "Video for replay {id} is too large for Discord ({:.2} MB)",
+                    video_size_mb
+                );
+                let msg = format!(
+                    "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                    However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
+                    📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                    requester_id.mention(),
+                    video_size_mb,
+                    server_url,
+                    id
+                );
+                if let Err(e) = channel_id.say(http, &msg).await {
+                    error!("Failed to send too-large notification: {e}");
+                }
+                return;
+            }
+
             let filename = format!("{id}.mp4");
             match channel_id
                 .send_message(
@@ -332,8 +392,35 @@ async fn send_video_message(
                 )
                 .await
             {
-                Ok(_) => info!("Sent video for replay {id}"),
-                Err(e) => error!("Failed to send video message: {e}"),
+                Ok(_) => info!("Sent video for replay {id} ({:.2} MB)", video_size_mb),
+                Err(e) => {
+                    error!("Failed to send video message: {e}");
+                    // Check if the error is due to file size (Discord might reject it)
+                    let error_str = e.to_string();
+                    let msg = if error_str.contains("40005") || error_str.contains("too large") {
+                        format!(
+                            "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                            However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
+                            📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                            requester_id.mention(),
+                            video_size_mb,
+                            server_url,
+                            id
+                        )
+                    } else {
+                        format!(
+                            "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                            However, we failed to send the video through Discord.\n\n\
+                            📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                            requester_id.mention(),
+                            server_url,
+                            id
+                        )
+                    };
+                    if let Err(send_err) = channel_id.say(http, &msg).await {
+                        error!("Failed to send fallback message: {send_err}");
+                    }
+                }
             }
         }
         Err(e) => {
