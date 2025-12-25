@@ -15,7 +15,6 @@ A [reference deployment] is available for testing. **Currently in beta - expect 
 3. **Wait for processing** - Bot sends status updates as the replay is processed
 4. **Download video** - Bot sends the finished MP4 when ready
 
-
 ### Using the Web UI
 
 1. Visit the [web interface](https://echelon.arqalite.org/)
@@ -72,18 +71,22 @@ For running the packages individually, check their respective `README.md` files.
 ### Environment Variables
 
 **Server:**
+
 - No required environment variables (uses defaults)
 
 **Discord Bot:**
+
 - `DISCORD_TOKEN` - Discord bot authentication token (required)
 - `ECHELON_SERVER_URL` - Server URL (defaults to `http://server:3000`)
 
 **Web UI:**
+
 - `API_BASE_URL` - Backend server URL (required for deployment)
 
 ### Docker Compose
 
 All services use an `.env` file. Key variables:
+
 ```bash
 DISCORD_TOKEN=your_bot_token_here
 ECHELON_SERVER_URL=http://server:3000  # Internal Docker network
@@ -92,20 +95,31 @@ ECHELON_SERVER_URL=http://server:3000  # Internal Docker network
 ## Testing
 
 Run all tests:
+
 ```bash
 cargo test --all
 ```
 
 Tests include:
+
 - **API tests** (11 tests) - Discord bot server communication
 - **Server tests** (27 tests) - Replay validation, job management, API routes
 
 ## Deployment
-Project Echelon is intended to be deployed in a Docker container; as such, Dockerfiles and a `compose.yaml` representative of our reference deployment are provided in the repository root.
+
+Project Echelon is intended to be deployed in a Docker environment; as such, Dockerfiles and a `compose.yaml` representative of our reference deployment are provided in the repository root.
 
 They should serve well as a starting point for your own deployment and should be ready to use - just `docker compose up --build` and you're good to go.
 
-Additionally, `captain-definition` files are provided for CapRover users.
+Additionally, prebuilt images for each service are available in the [Packages] tab, under their respective tags.
+
+For example, to use the latest version of Echelon, run the following images:
+
+- `project-echelon:server-latest`
+- `project-echelon:webui-latest`
+- `project-echelon:discord-latest`
+
+[Packages]: https://git.arqalite.org/COTFK/-/packages/container/project-echelon/versions
 
 ## Contributing
 
