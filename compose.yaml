@@ -31,4 +31,8 @@ services:
   discord:
     build:
       dockerfile: ./discord.Dockerfile
+    develop:
+      watch:
+        - action: rebuild
+          path: ./packages/echelon-discord/src
     env_file: .env
