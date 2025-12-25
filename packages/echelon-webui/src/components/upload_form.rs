@@ -107,7 +107,7 @@ pub fn UploadForm() -> Element {
                 onsubmit: handle_submit,
                 fieldset {
                     class: "fieldset bg-base-200 border-base-300 rounded-box min-w-64 md:w-sm lg:w-md border pb-6 pt-4 px-6 flex flex-col gap-4",
-                    if status().can_submit() {
+                    if matches!(status(), ReplayStatus::Idle) {
                         legend { class: "fieldset-legend text-base", "Upload your replay" }
                         div {
                             class: "flex flex-col justify-center items-center",
@@ -135,6 +135,17 @@ pub fn UploadForm() -> Element {
                                 "Privacy Policy"
                             }
                             "."
+                        }
+                    } else if matches!(status(), ReplayStatus::Error(_)) {
+                        legend { class: "fieldset-legend text-base", "Error" }
+                        div {
+                            class: "flex justify-center text-base",
+                            StatusDisplay { status: status() }
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            onclick: move |_| status.set(ReplayStatus::Idle),
+                            "Try again"
                         }
                     } else if matches!(status(), ReplayStatus::Completed(_)) {
                         legend { class: "fieldset-legend text-base", "Done!" }
