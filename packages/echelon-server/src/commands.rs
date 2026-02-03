@@ -178,8 +178,13 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
 
         // Determine trim boundaries from black regions
         if !black_regions.is_empty() {
-            // Trim from start: skip the first black region entirely
-            actual_trim_start = black_regions[0].1.min(5.0); // Don't skip more than 5 seconds
+            // Trim from start: only skip if the first black region starts at the very beginning
+            let (first_start, first_end) = black_regions[0];
+            if first_start < 0.5 {
+                // First black region is at the start, skip it entirely (but cap at 5 seconds)
+                actual_trim_start = first_end.min(5.0);
+                tracing::debug!("Found leading black region, trimming from {:.2}s", actual_trim_start);
+            }
             
             // Trim from end: check for black regions that are near the end of the video
             // If any black region's END is within 1 second of the video end, trim from its START
