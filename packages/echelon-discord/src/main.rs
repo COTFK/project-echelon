@@ -204,7 +204,7 @@ impl Handler {
 fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> String {
     match status {
         ReplayStatus::Queued { position } => {
-            format!("⏳ Queued at position {position}")
+            format!("⏳ Queued at position {position} - please wait...")
         }
         ReplayStatus::Processing { duration } => {
             let spinner = ['⠋', '⠙', '⠴', '⠦'][animation_frame.unwrap_or(0) % 4];
