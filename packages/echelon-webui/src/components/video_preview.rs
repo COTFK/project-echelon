@@ -29,9 +29,9 @@ pub fn VideoPreview(video_url: String) -> Element {
                         download: true,
                         svg {
                             xmlns: "http://www.w3.org/2000/svg",
-                            width: "1em", 
-                            height: "1em", 
-                            fill: "currentColor", 
+                            width: "1em",
+                            height: "1em",
+                            fill: "currentColor",
                             class: "me-1",
                             view_box: "0 0 16 16",
                             path {

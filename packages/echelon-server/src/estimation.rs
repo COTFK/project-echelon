@@ -122,7 +122,12 @@ impl std::fmt::Display for ReplayError {
 impl std::error::Error for ReplayError {}
 
 fn read_u32_le(data: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+    u32::from_le_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ])
 }
 
 fn read_header(data: &[u8]) -> Result<ReplayHeader, ReplayError> {
@@ -144,7 +149,11 @@ fn read_header(data: &[u8]) -> Result<ReplayHeader, ReplayError> {
         return Err(ReplayError::InvalidReplayId(id));
     }
 
-    let header_size = if flag & REPLAY_EXTENDED_HEADER != 0 { 72 } else { 32 };
+    let header_size = if flag & REPLAY_EXTENDED_HEADER != 0 {
+        72
+    } else {
+        32
+    };
     if data.len() < header_size {
         return Err(ReplayError::FileTooSmall);
     }
@@ -161,7 +170,11 @@ fn read_header(data: &[u8]) -> Result<ReplayHeader, ReplayError> {
     })
 }
 
-fn decompress_lzma(data: &[u8], props: &[u8; 5], uncompressed_size: u32) -> Result<Vec<u8>, ReplayError> {
+fn decompress_lzma(
+    data: &[u8],
+    props: &[u8; 5],
+    uncompressed_size: u32,
+) -> Result<Vec<u8>, ReplayError> {
     // Build LZMA alone format: props(5) + uncompressed_size(8 LE) + compressed_data
     let mut lzma_stream = Vec::with_capacity(13 + data.len());
     lzma_stream.extend_from_slice(props);
@@ -170,7 +183,7 @@ fn decompress_lzma(data: &[u8], props: &[u8; 5], uncompressed_size: u32) -> Resu
 
     let mut decompressed = Vec::new();
     let mut reader = Cursor::new(&lzma_stream);
-    
+
     lzma_rs::lzma_decompress(&mut reader, &mut decompressed)
         .map_err(|e| ReplayError::DecompressionError(e.to_string()))?;
 
@@ -209,13 +222,17 @@ fn parse_packets(data: &[u8], flag: u32) -> Vec<Packet> {
     }
 
     // Skip duel_flags
-    offset += if flag & REPLAY_64BIT_DUELFLAG != 0 { 8 } else { 4 };
+    offset += if flag & REPLAY_64BIT_DUELFLAG != 0 {
+        8
+    } else {
+        4
+    };
 
     // Parse packets: message(1) + length(4) + data(length)
     while offset + 5 <= data.len() {
         let msg = data[offset];
         offset += 1;
-        
+
         if msg == 0 {
             break;
         }
@@ -269,12 +286,26 @@ pub fn estimate_duration(packets: &[Packet], quick_animation: bool) -> f64 {
         // Skip non-pauseable messages (processed instantly)
         if matches!(
             msg,
-            MSG_START | MSG_UPDATE_DATA | MSG_UPDATE_CARD | MSG_SET | MSG_SWAP |
-            MSG_SUMMONING | MSG_SPSUMMONING | MSG_FLIPSUMMONING |
-            MSG_CHAIN_SOLVING | MSG_CHAIN_SOLVED | MSG_CHAIN_END |
-            MSG_RANDOM_SELECTED | MSG_EQUIP | MSG_UNEQUIP | MSG_CARD_TARGET |
-            MSG_CANCEL_TARGET | MSG_BATTLE | MSG_ATTACK_DISABLED |
-            MSG_TAG_SWAP | MSG_RELOAD_FIELD
+            MSG_START
+                | MSG_UPDATE_DATA
+                | MSG_UPDATE_CARD
+                | MSG_SET
+                | MSG_SWAP
+                | MSG_SUMMONING
+                | MSG_SPSUMMONING
+                | MSG_FLIPSUMMONING
+                | MSG_CHAIN_SOLVING
+                | MSG_CHAIN_SOLVED
+                | MSG_CHAIN_END
+                | MSG_RANDOM_SELECTED
+                | MSG_EQUIP
+                | MSG_UNEQUIP
+                | MSG_CARD_TARGET
+                | MSG_CANCEL_TARGET
+                | MSG_BATTLE
+                | MSG_ATTACK_DISABLED
+                | MSG_TAG_SWAP
+                | MSG_RELOAD_FIELD
         ) {
             continue;
         }
@@ -287,8 +318,8 @@ pub fn estimate_duration(packets: &[Packet], quick_animation: bool) -> f64 {
                 if let Some(&hint) = pkt.data.first() {
                     match hint {
                         HINT_EFFECT | HINT_CARD => 30.0,
-                        HINT_OPSELECTED | HINT_RACE | HINT_ATTRIB | 
-                        HINT_CODE | HINT_NUMBER | HINT_ZONE => 40.0,
+                        HINT_OPSELECTED | HINT_RACE | HINT_ATTRIB | HINT_CODE | HINT_NUMBER
+                        | HINT_ZONE => 40.0,
                         HINT_SKILL | HINT_SKILL_COVER | HINT_SKILL_FLIP => 11.0,
                         HINT_SKILL_REMOVE => 20.0,
                         _ => 0.0,

@@ -4,14 +4,14 @@
 
 mod api;
 mod components;
-mod types;
 mod pages;
+mod types;
 
 use dioxus::prelude::*;
 
-use pages::UploadPage;
 use pages::PrivacyPolicyPage;
 use pages::TermsOfServicePage;
+use pages::UploadPage;
 
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {

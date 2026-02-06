@@ -23,9 +23,9 @@ pub fn Footer() -> Element {
                         href: "https://discord.gg/8JtxHUAdGq",
                         svg {
                             xmlns: "http://www.w3.org/2000/svg",
-                            width: "1em", 
-                            height: "1em", 
-                            fill: "currentColor", 
+                            width: "1em",
+                            height: "1em",
+                            fill: "currentColor",
                             class: "text-2xl",
                             view_box: "0 0 16 16",
                             path {
@@ -37,9 +37,9 @@ pub fn Footer() -> Element {
                         href: "https://git.arqalite.org/COTFK/project-echelon",
                         svg {
                             xmlns: "http://www.w3.org/2000/svg",
-                            width: "1em", 
-                            height: "1em", 
-                            fill: "currentColor", 
+                            width: "1em",
+                            height: "1em",
+                            fill: "currentColor",
                             class: "text-2xl",
                             view_box: "0 0 16 16",
                             path {

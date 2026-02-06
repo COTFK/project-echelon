@@ -17,7 +17,7 @@ fn test_replay_status_parsing_processing() {
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
 
     match status {
-        ReplayStatus::Processing{..} => {}
+        ReplayStatus::Processing { .. } => {}
         _ => panic!("Expected Processing status"),
     }
 }
@@ -106,7 +106,7 @@ async fn test_get_replay_status_success() {
 
     assert!(result.is_ok());
     match result.unwrap() {
-        ReplayStatus::Processing{..} => {}
+        ReplayStatus::Processing { .. } => {}
         _ => panic!("Expected Processing status"),
     }
 }

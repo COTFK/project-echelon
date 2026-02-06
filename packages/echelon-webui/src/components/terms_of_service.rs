@@ -14,7 +14,7 @@ pub fn TermsOfService() -> Element {
             // Section 1
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "1. Acceptance of Terms" }
             p {
-                "By using Project Echelon, also sometimes referred to as Echelon (\"the Service\"), you agree to these Terms of Service. 
+                "By using Project Echelon, also sometimes referred to as Echelon (\"the Service\"), you agree to these Terms of Service.
                 If you do not agree, please do not use the Service."
             }
 
@@ -39,7 +39,7 @@ pub fn TermsOfService() -> Element {
             // Section 4
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "4. Intellectual Property" }
             p {
-                "You retain ownership of your replay files. The generated videos are yours to use. 
+                "You retain ownership of your replay files. The generated videos are yours to use.
                 Project Echelon does not claim ownership over user-submitted content."
             }
             p { class: "mt-2",
@@ -54,7 +54,7 @@ pub fn TermsOfService() -> Element {
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "5. Disclaimer of Warranties" }
             div { class: "alert alert-soft alert-warning",
                 p {
-                    "THE SERVICE IS PROVIDED \"AS IS\" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, 
+                    "THE SERVICE IS PROVIDED \"AS IS\" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED,
                     INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, 
                     OR NON-INFRINGEMENT. WE DO NOT GUARANTEE UNINTERRUPTED OR ERROR-FREE OPERATION."
                 }
@@ -63,7 +63,7 @@ pub fn TermsOfService() -> Element {
             // Section 6
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "6. Limitation of Liability" }
             p {
-                "To the maximum extent permitted by law, Project Echelon and its operators shall not be liable 
+                "To the maximum extent permitted by law, Project Echelon and its operators shall not be liable
                 for any indirect, incidental, special, consequential, or punitive damages arising from your use 
                 of the Service."
             }
@@ -71,14 +71,14 @@ pub fn TermsOfService() -> Element {
             // Section 7
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "7. Service Availability" }
             p {
-                "We reserve the right to modify, suspend, or discontinue the Service at any time without notice. 
+                "We reserve the right to modify, suspend, or discontinue the Service at any time without notice.
                 We are not liable for any modification, suspension, or discontinuation."
             }
 
             // Section 8
             h2 { class: "text-2xl font-semibold mt-8 mb-4", "8. Changes to Terms" }
             p {
-                "We may update these Terms at any time. Continued use of the Service after changes 
+                "We may update these Terms at any time. Continued use of the Service after changes
                 constitutes acceptance of the updated Terms."
             }
 

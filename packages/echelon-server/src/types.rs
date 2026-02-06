@@ -1,8 +1,8 @@
 //! Types relating to replays, videos and their status.
 
-use axum::body::Bytes;
 use crate::estimation::estimate_duration;
 use crate::estimation::load_replay_packets;
+use axum::body::Bytes;
 
 /// The processing status of a video.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]

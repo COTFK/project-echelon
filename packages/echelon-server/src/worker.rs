@@ -135,7 +135,9 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
 
     // Wait for EDOPro to exit
-    let edopro_exit_status = edopro_process.wait().await
+    let edopro_exit_status = edopro_process
+        .wait()
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to wait for EDOPro process: {e}"))?;
 
     // Stop the recording
@@ -164,7 +166,7 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     let trimmed_path_str = trimmed_file
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid trimmed file path"))?;
-    
+
     trim_black_frames(output_path_str, trimmed_path_str)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to trim black frames: {e}"))?;

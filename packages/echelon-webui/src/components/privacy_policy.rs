@@ -183,9 +183,9 @@ pub fn PrivacyPolicy() -> Element {
             div { class: "alert mt-4",
                 svg {
                     xmlns: "http://www.w3.org/2000/svg",
-                    width: "1em", 
-                    height: "1em", 
-                    fill: "currentColor", 
+                    width: "1em",
+                    height: "1em",
+                    fill: "currentColor",
                     class: "text-2xl",
                     view_box: "0 0 16 16",
                     path {

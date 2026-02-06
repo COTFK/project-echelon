@@ -142,32 +142,30 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
 
     if let Ok(output) = brightness_output {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         // Parse blackdetect output to find black regions
         let mut black_regions: Vec<(f64, f64)> = Vec::new();
 
         for line in stderr.lines() {
             if line.contains("black_start:") && line.contains("black_end:") {
                 // Extract black_start value
-                if let Some(start_idx) = line.find("black_start:") {
-                    if let Ok(start) = line[start_idx + 12..]
+                if let Some(start_idx) = line.find("black_start:")
+                    && let Ok(start) = line[start_idx + 12..]
                         .split_whitespace()
                         .next()
                         .unwrap_or("0")
                         .parse::<f64>()
+                {
+                    // Extract black_end value
+                    if let Some(end_idx) = line.find("black_end:")
+                        && let Ok(end) = line[end_idx + 10..]
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or("0")
+                            .parse::<f64>()
                     {
-                        // Extract black_end value
-                        if let Some(end_idx) = line.find("black_end:") {
-                            if let Ok(end) = line[end_idx + 10..]
-                                .split_whitespace()
-                                .next()
-                                .unwrap_or("0")
-                                .parse::<f64>()
-                            {
-                                black_regions.push((start, end));
-                                tracing::debug!("Black region: {:.2}s - {:.2}s", start, end);
-                            }
-                        }
+                        black_regions.push((start, end));
+                        tracing::debug!("Black region: {:.2}s - {:.2}s", start, end);
                     }
                 }
             }
@@ -183,9 +181,12 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
             if first_start < 0.5 {
                 // First black region is at the start, skip it entirely (but cap at 5 seconds)
                 actual_trim_start = first_end.min(5.0);
-                tracing::debug!("Found leading black region, trimming from {:.2}s", actual_trim_start);
+                tracing::debug!(
+                    "Found leading black region, trimming from {:.2}s",
+                    actual_trim_start
+                );
             }
-            
+
             // Trim from end: check for black regions that are near the end of the video
             // If any black region's END is within 1 second of the video end, trim from its START
             for (start, end) in &black_regions {
@@ -196,7 +197,7 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
                     break;
                 }
             }
-            
+
             tracing::info!(
                 "Detected {} black region(s), trimming from {:.2}s to {:.2}s",
                 black_regions.len(),
