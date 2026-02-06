@@ -203,13 +203,18 @@ impl Handler {
 /// Formats a replay status into a user-friendly message with optional animation frame.
 fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> String {
     match status {
-        ReplayStatus::Queued { position, eta } => {
-            format!("⏳ Queued at position {position} (ETA: {eta} min.)")
+        ReplayStatus::Queued {
+            position,
+            estimate_minutes,
+        } => {
+            format!(
+                "⏳ Queued at position {position} (ETA: {estimate_minutes} min.)"
+            )
         }
-        ReplayStatus::Processing { duration } => {
+        ReplayStatus::Processing { estimate_minutes } => {
             let spinner = ['⠋', '⠙', '⠴', '⠦'][animation_frame.unwrap_or(0) % 4];
 
-            format!("{spinner} Processing... (ETA: {duration} min.)")
+            format!("{spinner} Processing... (ETA: {estimate_minutes} min.)")
         }
         ReplayStatus::Done => "✅ Replay is ready!".to_string(),
         ReplayStatus::Error { message } => format!("❌ {message}"),
