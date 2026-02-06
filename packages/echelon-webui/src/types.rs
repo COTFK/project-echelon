@@ -24,9 +24,9 @@ pub enum ReplayStatus {
     /// The replay file is being uploaded to the server.
     Uploading,
     /// The replay is queued for processing at the given position with an ETA.
-    Queued { position: usize, eta: f64 },
+    Queued { position: usize, eta: u32 },
     /// The replay is currently being processed.
-    Processing { duration: f64 },
+    Processing { duration: u32 },
     /// Processing completed successfully, contains the replay ID for download.
     Completed(String),
     /// An error occurred during upload or processing.
@@ -77,11 +77,11 @@ pub struct StatusResponse {
     #[serde(default)]
     pub position: Option<usize>,
     #[serde(default)]
-    pub eta: Option<f64>,
+    pub eta: Option<u32>,
     #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
-    pub duration: Option<f64>,
+    pub duration: Option<u32>,
 }
 
 impl StatusResponse {
@@ -90,10 +90,10 @@ impl StatusResponse {
         match self.status.as_str() {
             "queued" => ReplayStatus::Queued {
                 position: self.position.unwrap_or(0),
-                eta: self.eta.unwrap_or(0.0),
+                eta: self.eta.unwrap_or(0),
             },
             "processing" => ReplayStatus::Processing {
-                duration: self.duration.unwrap_or(0.0),
+                duration: self.duration.unwrap_or(0),
             },
             "done" => ReplayStatus::Completed(replay_id.to_owned()),
             "error" => ReplayStatus::Error(ReplayError::Server(

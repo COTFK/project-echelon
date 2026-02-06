@@ -14,10 +14,10 @@ pub enum ReplayStatus {
     Queued {
         position: u32,
         #[serde(default)]
-        eta: f64,
+        eta: u32,
     },
     #[serde(rename = "processing")]
-    Processing { duration: f64 },
+    Processing { duration: u32 },
     #[serde(rename = "done")]
     Done,
     #[serde(rename = "error")]

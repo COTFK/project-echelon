@@ -27,10 +27,10 @@ const MAX_QUEUE_SIZE: usize = 100;
 enum StatusResponse {
     /// Job is queued and waiting to be processed.
     #[serde(rename = "queued")]
-    Queued { position: usize, eta: f64 },
+    Queued { position: usize, eta: u32 },
     /// Job is currently being processed.
     #[serde(rename = "processing")]
-    Processing { duration: f64 },
+    Processing { duration: u32 },
     /// Job is done and ready for download.
     #[serde(rename = "done")]
     Done,
@@ -110,10 +110,10 @@ pub async fn status(
 
             if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
                 // Sum estimated durations of all queued replays up to and including this one
-                let eta: f64 = queued_jobs
+                let eta: u32 = queued_jobs
                     .iter()
                     .take(position + 1)
-                    .map(|(_, job)| job.estimated_duration)
+                    .map(|(_, job)| (job.estimated_duration / 60.0).ceil() as u32)
                     .sum();
 
                 (
@@ -135,7 +135,7 @@ pub async fn status(
             }
         }
         Some(ReplayStatus::Recording) => {
-            let duration = job.unwrap().estimated_duration;
+            let duration = (job.unwrap().estimated_duration / 60.0).ceil() as u32;
 
             (
                 StatusCode::OK,

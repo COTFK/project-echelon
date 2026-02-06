@@ -11,13 +11,10 @@ pub fn StatusDisplay(status: ReplayStatus) -> Element {
         ReplayStatus::Idle => rsx! {},
         ReplayStatus::Uploading => rsx! { p { class: "", "Uploading..." } },
         ReplayStatus::Queued { position, eta } => {
-            let minutes = (eta / 60.0).ceil() as u32;
-            rsx! { p { class: "", "Queued at position {position} (ETA: {minutes} min.)" } }
+            rsx! { p { class: "", "Queued at position {position} (ETA: {eta} min.)" } }
         }
         ReplayStatus::Processing { duration } => {
-            let minutes = (duration / 60.0).ceil() as u32;
-
-            rsx! { p { class: "", "Processing... (ETA: {minutes} min.)" } }
+            rsx! { p { class: "", "Processing... (ETA: {duration} min.)" } }
         }
         ReplayStatus::Completed(_) => rsx! { p { class: "text-success", "Done!" } },
         ReplayStatus::Error(ref error) => {
