@@ -23,8 +23,8 @@ pub enum ReplayStatus {
     Idle,
     /// The replay file is being uploaded to the server.
     Uploading,
-    /// The replay is queued for processing at the given position.
-    Queued(usize),
+    /// The replay is queued for processing at the given position with an ETA.
+    Queued { position: usize, eta: f64 },
     /// The replay is currently being processed.
     Processing { duration: f64 },
     /// Processing completed successfully, contains the replay ID for download.
@@ -37,7 +37,7 @@ impl ReplayStatus {
     /// Returns `true` if we should poll for status updates.
     #[inline]
     pub const fn should_poll(&self) -> bool {
-        matches!(self, Self::Queued(_) | Self::Processing { duration: _ })
+        matches!(self, Self::Queued { .. } | Self::Processing { .. })
     }
 }
 
@@ -77,6 +77,8 @@ pub struct StatusResponse {
     #[serde(default)]
     pub position: Option<usize>,
     #[serde(default)]
+    pub eta: Option<f64>,
+    #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
     pub duration: Option<f64>,
@@ -86,7 +88,10 @@ impl StatusResponse {
     /// Converts the API response to a [`ReplayStatus`].
     pub fn into_replay_status(self, replay_id: &str) -> ReplayStatus {
         match self.status.as_str() {
-            "queued" => ReplayStatus::Queued(self.position.unwrap_or(0)),
+            "queued" => ReplayStatus::Queued {
+                position: self.position.unwrap_or(0),
+                eta: self.eta.unwrap_or(0.0),
+            },
             "processing" => ReplayStatus::Processing {
                 duration: self.duration.unwrap_or(0.0),
             },

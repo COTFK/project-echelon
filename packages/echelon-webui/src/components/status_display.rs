@@ -10,8 +10,9 @@ pub fn StatusDisplay(status: ReplayStatus) -> Element {
     match status {
         ReplayStatus::Idle => rsx! {},
         ReplayStatus::Uploading => rsx! { p { class: "", "Uploading..." } },
-        ReplayStatus::Queued(position) => {
-            rsx! { p { class: "", "Queued at position {position}..." } }
+        ReplayStatus::Queued { position, eta } => {
+            let minutes = (eta / 60.0).ceil() as u32;
+            rsx! { p { class: "", "Queued at position {position} (ETA: {minutes} min.)" } }
         }
         ReplayStatus::Processing { duration } => {
             let minutes = (duration / 60.0).ceil() as u32;
