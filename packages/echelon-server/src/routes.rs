@@ -21,6 +21,14 @@ use ulid::Ulid;
 /// Maximum number of jobs allowed in the queue.
 const MAX_QUEUE_SIZE: usize = 100;
 
+fn estimate_minutes_from_seconds(seconds: f64) -> u32 {
+    if seconds <= 0.0 {
+        0
+    } else {
+        (seconds / 60.0).ceil().max(1.0) as u32
+    }
+}
+
 /// Response type for the status endpoint.
 #[derive(Serialize)]
 #[serde(tag = "status")]
@@ -110,14 +118,20 @@ pub async fn status(
                 .iter()
                 .filter(|&(_, job)| job.status == ReplayStatus::Queued)
                 .collect();
+            let recording_estimate = lock
+                .values()
+                .find(|job| job.status == ReplayStatus::Recording)
+                .map(|job| estimate_minutes_from_seconds(job.estimated_duration))
+                .unwrap_or(0);
 
             if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
                 // Sum estimated durations of all queued replays up to and including this one
-                let estimate_minutes: u32 = queued_jobs
-                    .iter()
-                    .take(position + 1)
-                    .map(|(_, job)| (job.estimated_duration / 60.0).ceil() as u32)
-                    .sum();
+                let estimate_minutes: u32 = recording_estimate
+                    + queued_jobs
+                        .iter()
+                        .take(position + 1)
+                        .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration))
+                        .sum::<u32>();
 
                 (
                     StatusCode::OK,
@@ -138,7 +152,7 @@ pub async fn status(
             }
         }
         Some(ReplayStatus::Recording) => {
-            let estimate_minutes = (job.unwrap().estimated_duration / 60.0).ceil() as u32;
+            let estimate_minutes = estimate_minutes_from_seconds(job.unwrap().estimated_duration);
 
             (
                 StatusCode::OK,
