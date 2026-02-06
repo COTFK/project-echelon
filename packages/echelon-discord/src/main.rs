@@ -141,7 +141,7 @@ impl Handler {
                             .edit_response(
                                 &ctx.http,
                                 serenity::builder::EditInteractionResponse::new()
-                                    .content(format!("[`{}`] 📋 Replay queued!", id)),
+                                    .content("📋 Replay queued!"),
                             )
                             .await
                         {
@@ -264,9 +264,8 @@ async fn monitor_replay(
                     break;
                 }
 
-                if matches!(status, ReplayStatus::Processing{..}) || should_update {
-                    let message =
-                        format!("[`{id}`] {}", format_status(&status, Some(update_count)));
+                if matches!(status, ReplayStatus::Processing { .. }) || should_update {
+                    let message = format_status(&status, Some(update_count));
                     if let Err(e) = channel_id
                         .edit_message(
                             &http,
@@ -285,9 +284,7 @@ async fn monitor_replay(
 
                 if let ReplayStatus::Error { message } = &status {
                     // Update status message with the error before breaking
-                    let error_message = format!(
-                        "[`{id}`] ❌ {message}"
-                    );
+                    let error_message = format!("[`{id}`] ❌ {message}");
                     if let Err(e) = channel_id
                         .edit_message(
                             &http,
@@ -349,8 +346,15 @@ async fn send_video_message(
     requester_id: UserId,
     status_msg_id: MessageId,
 ) {
-    if let Err(e) = channel_id.delete_message(http, status_msg_id).await {
-        warn!("Failed to delete status message: {e}");
+    if let Err(e) = channel_id
+        .edit_message(
+            http,
+            status_msg_id,
+            serenity::builder::EditMessage::new().content("📥 Done! Preparing to send the video..."),
+        )
+        .await
+    {
+        warn!("Failed to update status message: {e}");
     }
 
     match download_video(server_url, id).await {
@@ -365,7 +369,7 @@ async fn send_video_message(
                     video_size_mb
                 );
                 let msg = format!(
-                    "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                    "{} ✅ Replay processed successfully! \n\n\
                     However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
                     📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
                     requester_id.mention(),
@@ -384,10 +388,7 @@ async fn send_video_message(
                 .send_message(
                     http,
                     serenity::builder::CreateMessage::new()
-                        .content(format!(
-                            "{} [`{id}`] ✅ Replay is ready!",
-                            requester_id.mention()
-                        ))
+                        .content(format!("{} ✅ Replay is ready!", requester_id.mention()))
                         .add_file(serenity::builder::CreateAttachment::bytes(
                             video_data, filename,
                         )),
@@ -401,7 +402,7 @@ async fn send_video_message(
                     let error_str = e.to_string();
                     let msg = if error_str.contains("40005") || error_str.contains("too large") {
                         format!(
-                            "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                            "{} ✅ Replay processed successfully! \n\n\
                             However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
                             📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
                             requester_id.mention(),
@@ -411,7 +412,7 @@ async fn send_video_message(
                         )
                     } else {
                         format!(
-                            "{} [`{id}`] ✅ Replay processed successfully! \n\n\
+                            "{} ✅ Replay processed successfully! \n\n\
                             However, we failed to send the video through Discord.\n\n\
                             📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
                             requester_id.mention(),
