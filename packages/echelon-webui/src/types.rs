@@ -26,7 +26,7 @@ pub enum ReplayStatus {
     /// The replay is queued for processing at the given position.
     Queued(usize),
     /// The replay is currently being processed.
-    Processing,
+    Processing { duration: f64 },
     /// Processing completed successfully, contains the replay ID for download.
     Completed(String),
     /// An error occurred during upload or processing.
@@ -37,7 +37,7 @@ impl ReplayStatus {
     /// Returns `true` if we should poll for status updates.
     #[inline]
     pub const fn should_poll(&self) -> bool {
-        matches!(self, Self::Queued(_) | Self::Processing)
+        matches!(self, Self::Queued(_) | Self::Processing { duration: _ })
     }
 }
 
@@ -78,6 +78,8 @@ pub struct StatusResponse {
     pub position: Option<usize>,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default)]
+    pub duration: Option<f64>
 }
 
 impl StatusResponse {
@@ -85,7 +87,7 @@ impl StatusResponse {
     pub fn into_replay_status(self, replay_id: &str) -> ReplayStatus {
         match self.status.as_str() {
             "queued" => ReplayStatus::Queued(self.position.unwrap_or(0)),
-            "processing" => ReplayStatus::Processing,
+            "processing" => ReplayStatus::Processing {duration: self.duration.unwrap_or(0.0)},
             "done" => ReplayStatus::Completed(replay_id.to_owned()),
             "error" => ReplayStatus::Error(ReplayError::Server(
                 self.message.unwrap_or_else(|| "Unknown error".to_owned()),

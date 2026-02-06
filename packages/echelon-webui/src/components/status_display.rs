@@ -13,7 +13,11 @@ pub fn StatusDisplay(status: ReplayStatus) -> Element {
         ReplayStatus::Queued(position) => {
             rsx! { p { class: "", "Queued at position {position}..." } }
         }
-        ReplayStatus::Processing => rsx! { p { class: "", "Processing..." } },
+        ReplayStatus::Processing {duration} => {
+            let minutes = (duration / 60.0).ceil() as u32;
+
+            rsx! { p { class: "", "Processing... (ETA: {minutes} min.)" } }
+        },
         ReplayStatus::Completed(_) => rsx! { p { class: "text-success", "Done!" } },
         ReplayStatus::Error(ref error) => {
             let class = if matches!(error, ReplayError::QueueFull) {
