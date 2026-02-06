@@ -206,9 +206,11 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
         ReplayStatus::Queued { position } => {
             format!("⏳ Queued at position {position}")
         }
-        ReplayStatus::Processing => {
+        ReplayStatus::Processing { duration } => {
             let spinner = ['⠋', '⠙', '⠴', '⠦'][animation_frame.unwrap_or(0) % 4];
-            format!("{spinner} Currently processing...")
+            let minutes = (duration / 60.0).ceil() as u32;
+
+            format!("{spinner} Currently processing... (ETA: ~{minutes} min)")
         }
         ReplayStatus::Done => "✅ Replay is ready!".to_string(),
         ReplayStatus::Error { message } => format!("❌ {message}"),
@@ -231,7 +233,7 @@ async fn monitor_replay(
     loop {
         let poll_interval_secs = if let Some(ref status) = last_status {
             match status {
-                ReplayStatus::Processing => POLL_INTERVAL_PROCESSING_SECS,
+                ReplayStatus::Processing { .. } => POLL_INTERVAL_PROCESSING_SECS,
                 _ => POLL_INTERVAL_DEFAULT_SECS,
             }
         } else {
@@ -262,7 +264,7 @@ async fn monitor_replay(
                     break;
                 }
 
-                if matches!(status, ReplayStatus::Processing) || should_update {
+                if matches!(status, ReplayStatus::Processing{..}) || should_update {
                     let message =
                         format!("[`{id}`] {}", format_status(&status, Some(update_count)));
                     if let Err(e) = channel_id
