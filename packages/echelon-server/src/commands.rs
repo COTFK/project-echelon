@@ -128,8 +128,8 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
         .args([
             "-i",
             input_file,
-            "-vf",
-            "fps=10,blackdetect=d=0.5:pic_th=0.95:pix_th=0.1",
+                "-vf",
+                "fps=60,blackdetect=d=0.1:pic_th=0.99:pix_th=0.08",
             "-f",
             "null",
             "-",
@@ -176,11 +176,13 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
 
         // Determine trim boundaries from black regions
         if !black_regions.is_empty() {
+            let boundary_epsilon = 0.05;
+
             // Trim from start: only skip if the first black region starts at the very beginning
             let (first_start, first_end) = black_regions[0];
-            if first_start < 0.5 {
-                // First black region is at the start, skip past it with a small buffer (but cap at 5 seconds)
-                actual_trim_start = (first_end + 0.5).min(5.0);
+            if first_start <= boundary_epsilon {
+                // First black region is at the start, skip it exactly (no extra buffer)
+                actual_trim_start = first_end + 0.1;
                 tracing::debug!(
                     "Found leading black region, trimming from {:.2}s",
                     actual_trim_start
@@ -188,9 +190,9 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
             }
 
             // Trim from end: check for black regions that are near the end of the video
-            // If any black region's END is within 1 second of the video end, trim from its START
+            // If any black region's END is within a small epsilon of the video end, trim from its START
             for (start, end) in &black_regions {
-                if (total_duration - end).abs() < 1.0 {
+                if (total_duration - end).abs() <= boundary_epsilon {
                     // This black region extends to the very end
                     actual_trim_end = *start;
                     tracing::debug!("Found trailing black region, trimming to {:.2}s", start);
