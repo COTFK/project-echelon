@@ -129,7 +129,7 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
             "-i",
             input_file,
             "-vf",
-            "fps=1,blackdetect=d=0.5:pic_th=0.95:pix_th=0.1",
+            "fps=10,blackdetect=d=0.5:pic_th=0.95:pix_th=0.1",
             "-f",
             "null",
             "-",
@@ -179,8 +179,8 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
             // Trim from start: only skip if the first black region starts at the very beginning
             let (first_start, first_end) = black_regions[0];
             if first_start < 0.5 {
-                // First black region is at the start, skip it entirely (but cap at 5 seconds)
-                actual_trim_start = first_end.min(5.0);
+                // First black region is at the start, skip past it with a small buffer (but cap at 5 seconds)
+                actual_trim_start = (first_end + 0.5).min(5.0);
                 tracing::debug!(
                     "Found leading black region, trimming from {:.2}s",
                     actual_trim_start
