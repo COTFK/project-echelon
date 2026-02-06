@@ -1,6 +1,8 @@
 //! Types relating to replays, videos and their status.
 
 use axum::body::Bytes;
+use crate::estimation::estimate_duration;
+use crate::estimation::load_replay_packets;
 
 /// The processing status of a video.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -16,12 +18,14 @@ pub enum ReplayStatus {
 }
 
 /// A tracked *.yrpX replay file.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub struct Replay {
     /// The replay file contents.
     pub data: Bytes,
     /// The video data, if any.
     pub video: Option<Bytes>,
+    /// Estimated video duration
+    pub estimated_duration: f64,
     /// The processing status - queued, recording, etc.
     pub status: ReplayStatus,
     /// Error message if the job failed.
@@ -30,10 +34,13 @@ pub struct Replay {
 
 impl Replay {
     /// Creates a [`Replay`] with a randomly generated ULID and the given file data.
-    pub const fn new(data: Bytes) -> Self {
+    pub fn new(data: Bytes) -> Self {
+        let packets = load_replay_packets(&data).unwrap();
+
         Self {
             data,
             video: None,
+            estimated_duration: estimate_duration(&packets, false),
             status: ReplayStatus::Queued,
             error_message: None,
         }

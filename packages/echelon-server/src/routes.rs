@@ -30,7 +30,7 @@ enum StatusResponse {
     Queued { position: usize },
     /// Job is currently being processed.
     #[serde(rename = "processing")]
-    Processing,
+    Processing { duration: f64 },
     /// Job is done and ready for download.
     #[serde(rename = "done")]
     Done,
@@ -124,7 +124,14 @@ pub async fn status(
                 )
             }
         }
-        Some(ReplayStatus::Recording) => (StatusCode::OK, Json(StatusResponse::Processing)),
+        Some(ReplayStatus::Recording) => {
+            let duration = job.unwrap().estimated_duration;
+
+            (
+                StatusCode::OK,
+                Json(StatusResponse::Processing { duration }),
+            )
+        }
         Some(ReplayStatus::Done) => (StatusCode::OK, Json(StatusResponse::Done)),
         Some(ReplayStatus::Error) => (
             StatusCode::OK,

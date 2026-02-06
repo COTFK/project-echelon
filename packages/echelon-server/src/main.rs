@@ -1,4 +1,5 @@
 mod commands;
+mod estimation;
 mod routes;
 mod types;
 mod worker;
