@@ -11,7 +11,11 @@ use std::env;
 #[serde(tag = "status")]
 pub enum ReplayStatus {
     #[serde(rename = "queued")]
-    Queued { position: u32 },
+    Queued {
+        position: u32,
+        #[serde(default)]
+        eta: f64,
+    },
     #[serde(rename = "processing")]
     Processing { duration: f64 },
     #[serde(rename = "done")]
