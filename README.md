@@ -10,6 +10,8 @@ A [reference deployment] is available for testing. **Currently in beta - expect 
 
 ### Using the Discord Bot (`@Echelon`)
 
+Add the bot to your own server using this [install link](https://discord.com/oauth2/authorize?client_id=1452676046326595605).
+
 1. **Send a replay** - DM or mention the bot with a `.yrpX` file attached
 2. **Get queued** - Bot confirms your replay is queued with a unique ID
 3. **Wait for processing** - Bot sends status updates as the replay is processed
