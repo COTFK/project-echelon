@@ -139,7 +139,7 @@ pub fn UploadForm() -> Element {
                     } else if matches!(status(), ReplayStatus::Error(_)) {
                         legend { class: "fieldset-legend text-base", "Error" }
                         div {
-                            class: "flex justify-center text-base",
+                            class: "flex items-center text-base flex-col gap-2",
                             StatusDisplay { status: status() }
                         }
                         button {
@@ -158,7 +158,7 @@ pub fn UploadForm() -> Element {
                         legend { class: "fieldset-legend text-base", "Converting..." }
                         LoadingSpinner {}
                         div {
-                            class: "flex justify-center text-base mt-2",
+                            class: "flex items-center text-base mt-2 flex-col gap-2",
                             StatusDisplay { status: status() }
                         }
                     }

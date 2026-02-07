@@ -14,10 +14,16 @@ pub fn StatusDisplay(status: ReplayStatus) -> Element {
             position,
             estimate_minutes,
         } => {
-            rsx! { p { class: "", "Queued at position {position} (ETA: {estimate_minutes} min.)" } }
+            rsx! { 
+                p { class: "", "Queued at position {position}." }
+                p { class: "", "(ETA: {estimate_minutes} min.)" } 
+            }
         }
         ReplayStatus::Processing { estimate_minutes } => {
-            rsx! { p { class: "", "Processing... (ETA: {estimate_minutes} min.)" } }
+            rsx! { 
+                p { class: "", "Processing..." }
+                p { class: "", "(ETA: {estimate_minutes} min.)" } 
+            }
         }
         ReplayStatus::Completed(_) => rsx! { p { class: "text-success", "Done!" } },
         ReplayStatus::Error(ref error) => {
