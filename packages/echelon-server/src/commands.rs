@@ -200,6 +200,9 @@ pub async fn trim_black_frames(input_file: &str, output_file: &str) -> anyhow::R
                 }
             }
 
+            // Trim an extra 0.1s from the end to be safe
+            actual_trim_end = actual_trim_end - 0.1;
+
             tracing::info!(
                 "Detected {} black region(s), trimming from {:.2}s to {:.2}s",
                 black_regions.len(),
