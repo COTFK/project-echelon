@@ -6,7 +6,9 @@ fn test_replay_status_parsing_queued() {
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
 
     match status {
-        ReplayStatus::Queued { position } => assert_eq!(position, 5),
+        ReplayStatus::Queued { position, estimate_minutes: _ } => {
+            assert_eq!(position, 5);
+        }
         _ => panic!("Expected Queued status"),
     }
 }
