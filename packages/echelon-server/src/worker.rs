@@ -1,12 +1,14 @@
 //! The [`worker()`] and [`cleanup()`] functions - background tasks for processing and maintenance.
 
+use crate::commands::create_frame_pipe;
 use crate::commands::launch_edopro;
 use crate::commands::record_display;
+use crate::commands::get_video_duration_secs;
 use crate::commands::trim_black_frames;
 use crate::types::Replay;
 use crate::types::ReplayStatus;
 use axum::body::Bytes;
-use nix::sys::signal::{SIGINT, kill};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -116,23 +118,32 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     let replay_path_str = replay_file_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid replay file path"))?;
-    let mut edopro_process = launch_edopro(replay_path_str)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
-
-    // Wait for EDOPro to initialize
-    sleep(Duration::from_millis(50)).await;
-
-    // Start recording the display
-    tracing::info!("[{}] Starting display recording...", id);
     let output_file_name = format!("{id}.mp4");
     let output_file = tmp_dir.path().join(output_file_name);
     let output_path_str = output_file
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid output file path"))?;
-    let mut ffmpeg_child = record_display(output_path_str)
+    let frame_pipe_path = tmp_dir.path().join("frames.pipe");
+    let frame_pipe_str = frame_pipe_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid frame pipe path"))?;
+
+    create_frame_pipe(frame_pipe_str)
+        .map_err(|e| anyhow::anyhow!("Failed to create frame pipe: {e}"))?;
+
+    // Start recording from the frame pipe before launching EDOPro to avoid blocking on FIFO open
+    tracing::info!("[{}] Starting frame recording...", id);
+    let mut ffmpeg_child = record_display(output_path_str, frame_pipe_str)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
+
+    let edopro_log_path = tmp_dir.path().join("edopro.stderr.log");
+    let edopro_log_str = edopro_log_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid EDOPro log file path"))?;
+    let mut edopro_process = launch_edopro(replay_path_str, frame_pipe_str, edopro_log_str)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
 
     // Wait for EDOPro to exit
     let edopro_exit_status = edopro_process
@@ -140,22 +151,34 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .await
         .map_err(|e| anyhow::anyhow!("Failed to wait for EDOPro process: {e}"))?;
 
-    // Stop the recording
-    tracing::info!("[{}] Replay finished. Stopping display recording...", id);
-    let pid = ffmpeg_child
-        .id()
-        .ok_or_else(|| anyhow::anyhow!("Video recording process exited unexpectedly"))?;
-    _ = kill(unistd::Pid::from_raw(pid.cast_signed()), SIGINT);
-    _ = ffmpeg_child.wait().await;
+    // Wait for ffmpeg to finish after EDOPro closes the frame pipe
+    tracing::info!("[{}] Replay finished. Waiting for ffmpeg to finalize...", id);
+    const FFMPEG_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+    let ffmpeg_wait = tokio::time::timeout(FFMPEG_SHUTDOWN_TIMEOUT, ffmpeg_child.wait()).await;
+    if ffmpeg_wait.is_err() {
+        if let Some(pid) = ffmpeg_child.id() {
+            _ = kill(unistd::Pid::from_raw(pid.cast_signed()), Signal::SIGINT);
+        }
+        let _ = tokio::time::timeout(FFMPEG_SHUTDOWN_TIMEOUT, ffmpeg_child.wait()).await;
+    }
 
     // Check if EDOPro exited with an error (e.g., invalid replay file)
     if !edopro_exit_status.success() {
+        let stderr = tokio::fs::read_to_string(&edopro_log_path)
+            .await
+            .unwrap_or_default();
         let code = edopro_exit_status
             .code()
             .map(|c| format!(" (exit code {c})"))
             .unwrap_or_default();
+        if stderr.trim().is_empty() {
+            return Err(anyhow::anyhow!(
+                "EDOPro exited with an error{code}. Logs were empty. Headless framebuffer mode may be unsupported in this build/environment."
+            ));
+        }
         return Err(anyhow::anyhow!(
-            "EDOPro exited with an error{code}. The replay file may be invalid or corrupted."
+            "EDOPro exited with an error{code}. Logs:\n{}",
+            stderr
         ));
     }
 
@@ -190,6 +213,26 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     job.video = Some(video_data.into());
     job.data = Bytes::new(); // Clear replay data - no longer needed
     job.status = ReplayStatus::Done;
+
+    let done_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let queued_ms = id.timestamp_ms();
+    let elapsed_secs = done_ms.saturating_sub(queued_ms) as f64 / 1000.0;
+    let video_secs = get_video_duration_secs(trimmed_path_str)
+        .await
+        .unwrap_or(job.estimated_duration);
+    let overhead_secs = (elapsed_secs - video_secs).max(0.0);
+    let ratio = if video_secs > 0.0 { elapsed_secs / video_secs } else { 0.0 };
+    tracing::info!(
+        "[{}] Processing time {:.2}s vs video {:.2}s: overhead {:.2}s, ratio {:.2}x",
+        id,
+        elapsed_secs,
+        video_secs,
+        overhead_secs,
+        ratio
+    );
 
     tracing::debug!("[{}] Job state updated to Done, replay data cleared.", id);
     Ok(())
