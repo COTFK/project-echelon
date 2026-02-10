@@ -4,7 +4,6 @@ use crate::commands::create_frame_pipe;
 use crate::commands::launch_edopro;
 use crate::commands::record_display;
 use crate::commands::get_video_duration_secs;
-use crate::commands::trim_black_frames;
 use crate::types::Replay;
 use crate::types::ReplayStatus;
 use axum::body::Bytes;
@@ -182,29 +181,10 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         ));
     }
 
-    // Trim black frames from the video
-    tracing::info!("[{}] Trimming black frames from video...", id);
-    let trimmed_file_name = format!("{id}_trimmed.mp4");
-    let trimmed_file = tmp_dir.path().join(trimmed_file_name);
-    let trimmed_path_str = trimmed_file
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("Invalid trimmed file path"))?;
-
-    trim_black_frames(output_path_str, trimmed_path_str)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to trim black frames: {e}"))?;
-
-    // Load trimmed file into memory and clear replay data to free memory
-    let video_data = tokio::fs::read(&trimmed_file)
+    // Load output file into memory and clear replay data to free memory
+    let video_data = tokio::fs::read(&output_file)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to read trimmed video file: {e}"))?;
-    let video_size = video_data.len();
-    tracing::info!(
-        "[{}] Video trimmed successfully. Size: {} bytes ({:.2} MB).",
-        id,
-        video_size,
-        video_size as f64 / (1024.0 * 1024.0)
-    );
 
     let mut lock = state.write().await;
     let job = lock
@@ -220,10 +200,10 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .as_millis() as u64;
     let queued_ms = id.timestamp_ms();
     let elapsed_secs = done_ms.saturating_sub(queued_ms) as f64 / 1000.0;
-    let video_secs = get_video_duration_secs(trimmed_path_str)
+    let video_secs = get_video_duration_secs(output_path_str)
         .await
         .unwrap_or(job.estimated_duration);
-    let overhead_secs = (elapsed_secs - video_secs).max(0.0);
+    let overhead_secs = elapsed_secs - video_secs;
     let ratio = if video_secs > 0.0 { elapsed_secs / video_secs } else { 0.0 };
     tracing::info!(
         "[{}] Processing time {:.2}s vs video {:.2}s: overhead {:.2}s, ratio {:.2}x",
