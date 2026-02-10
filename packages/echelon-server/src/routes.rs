@@ -59,7 +59,7 @@ pub async fn download(
     Path(id): Path<Ulid>,
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Download requested.", id);
-    let lock = jobs.write().await;
+    let lock = jobs.read().await;
 
     // Safely extract video data if job exists, is done, and has video
     if let Some(replay) = lock.get(&id) {
