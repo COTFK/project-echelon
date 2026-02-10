@@ -5,6 +5,7 @@
 use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::time::Duration;
 
 /// Represents the status of a replay processing job from the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,10 +27,21 @@ pub enum ReplayStatus {
     NotFound { message: String },
 }
 
+/// Creates an HTTP client with appropriate timeouts.
+/// Connection timeout: 30s, Total request timeout: 90s
+/// This prevents hanging indefinitely on slow or unresponsive connections.
+fn create_http_client() -> HttpClient {
+    HttpClient::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(90))
+        .build()
+        .expect("Failed to build HTTP client")
+}
+
 /// Uploads a replay file to the echelon server.
 /// Returns the unique ID assigned to the replay.
 pub async fn upload_file(url: &str, data: &[u8]) -> Result<String, String> {
-    let client = HttpClient::new();
+    let client = create_http_client();
 
     let mut request = client
         .post(url)
@@ -64,7 +76,7 @@ pub async fn upload_file(url: &str, data: &[u8]) -> Result<String, String> {
 
 /// Fetches the current status of a replay from the server.
 pub async fn get_replay_status(server_url: &str, id: &str) -> Result<ReplayStatus, String> {
-    let client = HttpClient::new();
+    let client = create_http_client();
     let status_url = format!("{}/status/{}", server_url, id);
 
     let response = client
@@ -87,7 +99,7 @@ pub async fn get_replay_status(server_url: &str, id: &str) -> Result<ReplayStatu
 
 /// Downloads a finished replay video from the server.
 pub async fn download_video(server_url: &str, id: &str) -> Result<Vec<u8>, String> {
-    let client = HttpClient::new();
+    let client = create_http_client();
     let download_url = format!("{}/download/{}", server_url, id);
 
     let response = client
