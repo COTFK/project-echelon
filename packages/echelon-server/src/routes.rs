@@ -193,8 +193,12 @@ pub async fn upload(
     let replay = Replay::new(body);
     let mut lock = jobs.write().await;
 
-    // Check if we have space in the queue
-    let current_queue_size = lock.len();
+    // Check if we have space in the queue (only count active jobs)
+    let current_queue_size = lock
+        .values()
+        .filter(|job| job.status == ReplayStatus::Queued)
+        .count();
+
     if current_queue_size >= MAX_QUEUE_SIZE {
         tracing::warn!(
             "[{}] Queue full ({}/{} jobs). Refusing upload.",
