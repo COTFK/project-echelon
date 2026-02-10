@@ -74,12 +74,13 @@ For running the packages individually, check their respective `README.md` files.
 
 **Server:**
 
-- No required environment variables (uses defaults)
+- `BOT_SECRET` - a secret key (can be any value, as long as you keep it secret!) used to identify requests coming from the Discord bot, and bypass the rate limit
 
 **Discord Bot:**
 
 - `DISCORD_TOKEN` - Discord bot authentication token (required)
-- `ECHELON_SERVER_URL` - Server URL (defaults to `http://server:3000`)
+- `ECHELON_SERVER_URL` - Server URL (defaults to `http://server:3000`)]
+- `BOT_SECRET` - a secret key (can be any value, as long as you keep it secret!) to bypass server rate limits
 
 **Web UI:**
 
