@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 mod api;
-use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file};
+use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file, validate_server_url};
 
 type Http = Arc<serenity::http::Http>;
 
@@ -224,7 +224,7 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
 }
 
 async fn monitor_replay(
-    server_url: String,
+    server_url: &'static str,
     id: String,
     channel_id: ChannelId,
     status_msg_id: MessageId,
@@ -486,6 +486,9 @@ async fn main() {
     _ = dotenvy::dotenv();
 
     info!("Starting Discord bot...");
+
+    // Validate required environment variables at startup (fail fast)
+    validate_server_url();
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not set");
     let intents = GatewayIntents::empty();

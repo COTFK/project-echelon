@@ -5,7 +5,11 @@
 use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::sync::OnceLock;
 use std::time::Duration;
+
+/// Cached server URL, initialized once on first access.
+static SERVER_URL: OnceLock<String> = OnceLock::new();
 
 /// Represents the status of a replay processing job from the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +125,16 @@ pub async fn download_video(server_url: &str, id: &str) -> Result<Vec<u8>, Strin
     Ok(data)
 }
 
-/// Gets the echelon server URL from environment or uses default.
-pub fn get_server_url() -> String {
-    env::var("ECHELON_SERVER_URL").expect("ECHELON_SERVER_URL must be set")
+/// Gets the echelon server URL, cached after first read.
+/// Panics if `ECHELON_SERVER_URL` is not set. Call [`validate_server_url`] at startup
+/// to fail fast instead of on the first user command.
+pub fn get_server_url() -> &'static str {
+    SERVER_URL.get_or_init(|| {
+        env::var("ECHELON_SERVER_URL").expect("ECHELON_SERVER_URL must be set")
+    })
+}
+
+/// Validates that `ECHELON_SERVER_URL` is set. Call at startup to fail fast.
+pub fn validate_server_url() {
+    let _ = get_server_url();
 }
