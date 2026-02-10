@@ -1,5 +1,7 @@
 use std::io::Cursor;
 
+const PROCESSING_RATE: f64 = 1.50;
+
 // yrpX file constants
 const REPLAY_YRPX: u32 = 0x58707279;
 const REPLAY_YRP1: u32 = 0x31707279;
@@ -84,12 +86,8 @@ pub struct Packet {
 
 #[derive(Debug, Clone)]
 pub struct ReplayHeader {
-    pub id: u32,
-    pub version: u32,
     pub flag: u32,
-    pub timestamp: u32,
     pub datasize: u32,
-    pub hash: u32,
     pub props: [u8; 5],
     pub header_size: usize,
 }
@@ -136,11 +134,8 @@ fn read_header(data: &[u8]) -> Result<ReplayHeader, ReplayError> {
     }
 
     let id = read_u32_le(data, 0);
-    let version = read_u32_le(data, 4);
     let flag = read_u32_le(data, 8);
-    let timestamp = read_u32_le(data, 12);
     let datasize = read_u32_le(data, 16);
-    let hash = read_u32_le(data, 20);
 
     let mut props = [0u8; 5];
     props.copy_from_slice(&data[24..29]);
@@ -159,12 +154,8 @@ fn read_header(data: &[u8]) -> Result<ReplayHeader, ReplayError> {
     }
 
     Ok(ReplayHeader {
-        id,
-        version,
         flag,
-        timestamp,
         datasize,
-        hash,
         props,
         header_size,
     })
@@ -273,11 +264,10 @@ pub fn load_replay_packets(data: &[u8]) -> Result<Vec<Packet>, ReplayError> {
 ///
 /// # Arguments
 /// * `packets` - The parsed packet list from a replay
-/// * `quick_animation` - Whether quick animation mode is enabled
 ///
 /// # Returns
 /// Estimated duration in seconds as f64
-pub fn estimate_duration(packets: &[Packet], quick_animation: bool) -> f64 {
+pub fn estimate_duration(packets: &[Packet]) -> f64 {
     let mut total_frames: f64 = 0.0;
 
     for pkt in packets {
@@ -356,10 +346,6 @@ pub fn estimate_duration(packets: &[Packet], quick_animation: bool) -> f64 {
         };
     }
 
-    // Convert frames to seconds (60 FPS, quick_animation caps at ~200ms)
-    if quick_animation {
-        total_frames * (200.0 / 60.0) / 1000.0
-    } else {
-        total_frames * (1000.0 / 60.0) / 1000.0
-    }
+    // Convert frames to seconds (at 60 FPS)
+    (total_frames * (1000.0 / 60.0) / 1000.0) * PROCESSING_RATE
 }

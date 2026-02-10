@@ -40,7 +40,7 @@ impl Replay {
         Self {
             data,
             video: None,
-            estimated_duration: estimate_duration(&packets, false),
+            estimated_duration: estimate_duration(&packets),
             status: ReplayStatus::Queued,
             error_message: None,
         }
