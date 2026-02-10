@@ -190,7 +190,30 @@ pub async fn upload(
         file_size as f64 / 1024.0
     );
 
-    let replay = Replay::new(body);
+    // Validate and parse the replay file before acquiring the lock
+    let replay = match Replay::new(body) {
+        Ok(replay) => replay,
+        Err(e) => {
+            tracing::error!("[{}] Failed to parse replay file: {}", id, e);
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid replay file: {}", e),
+            );
+        }
+    };
+
+    // Additional basic validation check
+    if !replay.is_replay_file() {
+        tracing::error!(
+            "[{}] Invalid replay file format (magic bytes check failed).",
+            id
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            String::from("File is not a *.yrpX file."),
+        );
+    }
+
     let mut lock = jobs.write().await;
 
     // Check if we have space in the queue (only count active jobs)
@@ -209,14 +232,6 @@ pub async fn upload(
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             String::from("Queue is full. Please try again later."),
-        );
-    }
-
-    if !replay.is_replay_file() {
-        tracing::error!("[{}] Invalid replay file format.", id);
-        return (
-            StatusCode::BAD_REQUEST,
-            String::from("File is not a *.yrpX file."),
         );
     }
 

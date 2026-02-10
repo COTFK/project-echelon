@@ -33,17 +33,19 @@ pub struct Replay {
 }
 
 impl Replay {
-    /// Creates a [`Replay`] with a randomly generated ULID and the given file data.
-    pub fn new(data: Bytes) -> Self {
-        let packets = load_replay_packets(&data).unwrap();
+    /// Creates a [`Replay`] with the given file data.
+    /// Returns an error if the replay file is malformed or cannot be parsed.
+    pub fn new(data: Bytes) -> Result<Self, String> {
+        let packets = load_replay_packets(&data)
+            .map_err(|e| format!("Failed to parse replay file: {:?}", e))?;
 
-        Self {
+        Ok(Self {
             data,
             video: None,
             estimated_duration: estimate_duration(&packets),
             status: ReplayStatus::Queued,
             error_message: None,
-        }
+        })
     }
 
     /// Checks if the file is a legitimate *.yrpX file.
