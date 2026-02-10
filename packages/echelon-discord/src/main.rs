@@ -18,6 +18,7 @@ type Http = Arc<serenity::http::Http>;
 const POLL_INTERVAL_PROCESSING_SECS: u64 = 3; // Poll every 3s during processing
 const POLL_INTERVAL_DEFAULT_SECS: u64 = 10; // Poll every 10s for other states
 const STALE_STATUS_THRESHOLD_SECS: u64 = 60;
+const MAX_MONITORING_DURATION_SECS: u64 = 3660; // Maximum 1 hour of monitoring + 1 minute grace period
 
 /// Discord's file size limit in bytes (10MB for non-Nitro users)
 const DISCORD_FILE_LIMIT_BYTES: usize = 10 * 1024 * 1024;
@@ -230,11 +231,37 @@ async fn monitor_replay(
     requester_id: UserId,
     http: Http,
 ) {
+    let start_time = Instant::now();
     let mut last_status: Option<ReplayStatus> = None;
     let mut last_update = Instant::now();
     let mut update_count: usize = 0;
 
     loop {
+        // Check if we've exceeded the maximum monitoring duration
+        if start_time.elapsed() >= Duration::from_secs(MAX_MONITORING_DURATION_SECS) {
+            warn!(
+                "[{}] Monitoring task exceeded maximum duration ({} minutes), terminating.",
+                id,
+                MAX_MONITORING_DURATION_SECS / 60
+            );
+            let timeout_message = format!(
+                "[`{id}`] ⏱️ Monitoring timed out after {} minutes. The job may still be processing. Check the status later or contact us if this persists.",
+                MAX_MONITORING_DURATION_SECS / 60
+            );
+            if let Err(e) = channel_id
+                .edit_message(
+                    &http,
+                    status_msg_id,
+                    serenity::builder::EditMessage::new().content(&timeout_message),
+                )
+                .await
+            {
+                error!("Failed to send timeout message: {e}");
+                let _ = channel_id.say(&http, &timeout_message).await;
+            }
+            break;
+        }
+
         let poll_interval_secs = if let Some(ref status) = last_status {
             match status {
                 ReplayStatus::Processing { .. } => POLL_INTERVAL_PROCESSING_SECS,

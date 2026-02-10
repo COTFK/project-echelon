@@ -23,8 +23,8 @@ const JOB_TTL_SECS: u64 = 3600;
 /// Cleanup interval (5 minutes).
 const CLEANUP_INTERVAL_SECS: u64 = 300;
 
-/// Maximum time allowed for processing a single job (10 minutes).
-const JOB_TIMEOUT_SECS: u64 = 600;
+/// Maximum time allowed for processing a single job (1 hour).
+const JOB_TIMEOUT_SECS: u64 = 3600;
 
 /// Worker function that gets the first replay in the queue,
 /// records it and saves it in the output map.
