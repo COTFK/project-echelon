@@ -159,6 +159,22 @@ impl KeyExtractor for RealIpKeyExtractor {
     type Key = String;
 
     fn extract<T>(&self, req: &axum::http::Request<T>) -> Result<Self::Key, tower_governor::GovernorError> {
+        // Check for bot secret - if present and valid, use a special key that bypasses limiting
+        if let Ok(expected_secret) = std::env::var("BOT_SECRET") {
+            if !expected_secret.is_empty() {
+                if let Some(bot_secret) = req.headers().get("x-bot-secret") {
+                    if let Ok(value) = bot_secret.to_str() {
+                        if value == expected_secret {
+                            tracing::info!("Received request from Discord bot - exempting from rate limit.");
+                            // Return a unique key per bot request to effectively bypass rate limiting
+                            // (each request gets its own bucket with full capacity)
+                            return Ok(format!("bot:{}", Ulid::new()));
+                        }
+                    }
+                }
+            }
+        }
+
         // Try X-Forwarded-For header first (CapRover/nginx standard)
         if let Some(forwarded_for) = req.headers().get("x-forwarded-for") {
             if let Ok(value) = forwarded_for.to_str() {

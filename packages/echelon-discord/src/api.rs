@@ -31,9 +31,18 @@ pub enum ReplayStatus {
 pub async fn upload_file(url: &str, data: &[u8]) -> Result<String, String> {
     let client = HttpClient::new();
 
-    let response = client
+    let mut request = client
         .post(url)
-        .header("Content-Type", "application/octet-stream")
+        .header("Content-Type", "application/octet-stream");
+
+    // Add bot secret token if configured (to bypass rate limiting)
+    if let Ok(bot_secret) = env::var("BOT_SECRET") {
+        if !bot_secret.is_empty() {
+            request = request.header("X-Bot-Secret", bot_secret);
+        }
+    }
+
+    let response = request
         .body(data.to_vec())
         .send()
         .await
