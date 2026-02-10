@@ -76,6 +76,10 @@ pub async fn worker(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> ! {
 
 /// Processes a single job. Returns an error if any step fails.
 async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> anyhow::Result<()> {
+    let start_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
     tracing::info!("[{}] Starting job processing...", id);
 
     // Update status to Recording
@@ -198,8 +202,7 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-    let queued_ms = id.timestamp_ms();
-    let elapsed_secs = done_ms.saturating_sub(queued_ms) as f64 / 1000.0;
+    let elapsed_secs = done_ms.saturating_sub(start_ms) as f64 / 1000.0;
     let video_secs = get_video_duration_secs(output_path_str)
         .await
         .unwrap_or(job.estimated_duration);
