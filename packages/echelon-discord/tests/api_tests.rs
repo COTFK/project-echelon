@@ -15,7 +15,7 @@ fn test_replay_status_parsing_queued() {
 
 #[test]
 fn test_replay_status_parsing_processing() {
-    let json = r#"{"status":"processing"}"#;
+    let json = r#"{"status":"processing","estimate_minutes":5}"#;
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
 
     match status {
@@ -100,7 +100,7 @@ async fn test_get_replay_status_success() {
     let _mock = server
         .mock("GET", "/status/test-id")
         .with_status(200)
-        .with_body(r#"{"status":"processing"}"#)
+        .with_body(r#"{"status":"processing","estimate_minutes":5}"#)
         .expect(1)
         .create();
 
