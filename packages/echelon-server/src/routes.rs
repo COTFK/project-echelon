@@ -61,43 +61,42 @@ pub async fn download(
     tracing::debug!("[{}] Download requested.", id);
     let lock = jobs.write().await;
 
-    // Check if job exists, is done, and has video data before removing
-    let has_video = lock
-        .get(&id)
-        .is_some_and(|job| job.status == ReplayStatus::Done && job.video.is_some());
+    // Safely extract video data if job exists, is done, and has video
+    if let Some(replay) = lock.get(&id) {
+        if replay.status == ReplayStatus::Done {
+            if let Some(ref video_data) = replay.video {
+                let video_size = video_data.len();
+                let video_data = video_data.clone();
 
-    if has_video {
-        // Safe to remove - we verified video exists
-        let replay = lock.get(&id).unwrap();
-        let video_data = replay.video.clone().unwrap();
-        let video_size = video_data.len();
+                tracing::info!(
+                    "[{}] Download successful. Video size: {} bytes ({:.2} MB).",
+                    id,
+                    video_size,
+                    video_size as f64 / (1024.0 * 1024.0)
+                );
 
-        tracing::info!(
-            "[{}] Download successful. Video size: {} bytes ({:.2} MB).",
-            id,
-            video_size,
-            video_size as f64 / (1024.0 * 1024.0)
-        );
-
-        let disposition = format!("attachment; filename=\"{id}.mp4\"");
-        (
-            StatusCode::OK,
-            [
-                ("Content-Type", "video/mp4"),
-                ("Content-Disposition", disposition.as_str()),
-            ],
-            video_data,
-        )
-            .into_response()
-    } else {
-        tracing::warn!("[{}] Download failed - video not found or not ready.", id);
-        (
-            StatusCode::NOT_FOUND,
-            [("Content-Type", "text/plain"), ("Content-Disposition", "")],
-            Bytes::from("Video not found."),
-        )
-            .into_response()
+                let disposition = format!("attachment; filename=\"{id}.mp4\"");
+                return (
+                    StatusCode::OK,
+                    [
+                        ("Content-Type", "video/mp4"),
+                        ("Content-Disposition", disposition.as_str()),
+                    ],
+                    video_data,
+                )
+                    .into_response();
+            }
+        }
     }
+
+    // Job not found, not done, or no video data available
+    tracing::warn!("[{}] Download failed - video not found or not ready.", id);
+    (
+        StatusCode::NOT_FOUND,
+        [("Content-Type", "text/plain"), ("Content-Disposition", "")],
+        Bytes::from("Video not found."),
+    )
+        .into_response()
 }
 
 /// Checks the status of a given replay ID and returns it.
@@ -107,71 +106,71 @@ pub async fn status(
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Status check requested.", id);
     let lock = jobs.read().await;
-    let job = lock.get(&id);
-    let status_option = job.map(|j| j.status.clone());
-    let error_message = job.and_then(|j| j.error_message.clone());
+    
+    if let Some(job) = lock.get(&id) {
+        match job.status {
+            ReplayStatus::Queued => {
+                // Collect queued jobs to calculate position and ETA
+                let queued_jobs: Vec<_> = lock
+                    .iter()
+                    .filter(|&(_, job)| job.status == ReplayStatus::Queued)
+                    .collect();
+                let recording_estimate = lock
+                    .values()
+                    .find(|job| job.status == ReplayStatus::Recording)
+                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration))
+                    .unwrap_or(0);
 
-    match status_option {
-        Some(ReplayStatus::Queued) => {
-            // Collect queued jobs to calculate position and ETA
-            let queued_jobs: Vec<_> = lock
-                .iter()
-                .filter(|&(_, job)| job.status == ReplayStatus::Queued)
-                .collect();
-            let recording_estimate = lock
-                .values()
-                .find(|job| job.status == ReplayStatus::Recording)
-                .map(|job| estimate_minutes_from_seconds(job.estimated_duration))
-                .unwrap_or(0);
+                if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
+                    // Sum estimated durations of all queued replays up to and including this one
+                    let estimate_minutes: u32 = recording_estimate
+                        + queued_jobs
+                            .iter()
+                            .take(position + 1)
+                            .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration))
+                            .sum::<u32>();
 
-            if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
-                // Sum estimated durations of all queued replays up to and including this one
-                let estimate_minutes: u32 = recording_estimate
-                    + queued_jobs
-                        .iter()
-                        .take(position + 1)
-                        .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration))
-                        .sum::<u32>();
+                    (
+                        StatusCode::OK,
+                        Json(StatusResponse::Queued {
+                            position: position + 1,
+                            estimate_minutes,
+                        }),
+                    )
+                } else {
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(StatusResponse::NotFound {
+                            message: String::from(
+                                "No replay with the requested ID was found in the queue.",
+                            ),
+                        }),
+                    )
+                }
+            }
+            ReplayStatus::Recording => {
+                let estimate_minutes = estimate_minutes_from_seconds(job.estimated_duration);
 
                 (
                     StatusCode::OK,
-                    Json(StatusResponse::Queued {
-                        position: position + 1,
-                        estimate_minutes,
-                    }),
-                )
-            } else {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(StatusResponse::NotFound {
-                        message: String::from(
-                            "No replay with the requested ID was found in the queue.",
-                        ),
-                    }),
+                    Json(StatusResponse::Processing { estimate_minutes }),
                 )
             }
-        }
-        Some(ReplayStatus::Recording) => {
-            let estimate_minutes = estimate_minutes_from_seconds(job.unwrap().estimated_duration);
-
-            (
+            ReplayStatus::Done => (StatusCode::OK, Json(StatusResponse::Done)),
+            ReplayStatus::Error => (
                 StatusCode::OK,
-                Json(StatusResponse::Processing { estimate_minutes }),
-            )
+                Json(StatusResponse::Error {
+                    message: job.error_message.clone().unwrap_or_else(|| String::from("An error has occurred.")),
+                }),
+            ),
         }
-        Some(ReplayStatus::Done) => (StatusCode::OK, Json(StatusResponse::Done)),
-        Some(ReplayStatus::Error) => (
-            StatusCode::OK,
-            Json(StatusResponse::Error {
-                message: error_message.unwrap_or_else(|| String::from("An error has occurred.")),
-            }),
-        ),
-        None => (
+    } else {
+        (
             StatusCode::NOT_FOUND,
             Json(StatusResponse::NotFound {
                 message: String::from("No replay with the requested ID was found."),
             }),
-        ),
+        )
     }
 }
 
