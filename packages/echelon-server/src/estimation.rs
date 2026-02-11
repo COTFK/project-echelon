@@ -1,6 +1,8 @@
 use std::io::Cursor;
 
-const PROCESSING_RATE: f64 = 1.50;
+/// Time multiplier used to more accurately estimate ETAs.
+/// Set the TIME_MULTIPLIER environment variable to override this.
+const DEFAULT_TIME_MULTIPLIER: f64 = 1.0;
 
 // yrpX file constants
 const REPLAY_YRPX: u32 = 0x58707279;
@@ -346,6 +348,11 @@ pub fn estimate_duration(packets: &[Packet]) -> f64 {
         };
     }
 
+    let time_multiplier = std::env::var("TIME_MULTIPLIER")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(DEFAULT_TIME_MULTIPLIER);
+
     // Convert frames to seconds (at 60 FPS)
-    (total_frames * (1000.0 / 60.0) / 1000.0) * PROCESSING_RATE
+    (total_frames * (1000.0 / 60.0) / 1000.0) * time_multiplier
 }
