@@ -95,7 +95,7 @@ pub async fn record_display(output_file: &str, frame_pipe_path: &str) -> anyhow:
             "-i",
             frame_pipe_path,
             "-vf",
-            "select='gte(n,10)',setpts=N/FRAME_RATE/TB",
+            "select='gte(n,2)',setpts=N/FRAME_RATE/TB",
             "-c:v",
             "libx264",
             "-preset",
