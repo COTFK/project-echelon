@@ -103,7 +103,7 @@ pub async fn record_display(output_file: &str, frame_pipe_path: &str) -> anyhow:
             "-pix_fmt",
             "yuv420p",
             "-movflags",
-            "faststart",
+            "+faststart",
             "-y",
             output_file,
         ])

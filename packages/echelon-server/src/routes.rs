@@ -11,6 +11,7 @@ use axum::body::Bytes;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::http::header::HeaderMap;
 use axum::response::IntoResponse;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -57,36 +58,73 @@ enum StatusResponse {
 pub async fn download(
     State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
     Path(id): Path<Ulid>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Download requested.", id);
     let lock = jobs.read().await;
 
     // Safely extract video data if job exists, is done, and has video
-    if let Some(replay) = lock.get(&id) {
-        if replay.status == ReplayStatus::Done {
-            if let Some(ref video_data) = replay.video {
-                let video_size = video_data.len();
-                let video_data = video_data.clone();
+    if let Some(replay) = lock.get(&id)
+        && replay.status == ReplayStatus::Done
+        && let Some(ref video_data) = replay.video
+    {
+        let video_size = video_data.len();
 
-                tracing::info!(
-                    "[{}] Download successful. Video size: {} bytes ({:.2} MB).",
-                    id,
-                    video_size,
-                    video_size as f64 / (1024.0 * 1024.0)
-                );
+        tracing::info!(
+            "[{}] Download successful. Video size: {} bytes ({:.2} MB).",
+            id,
+            video_size,
+            video_size as f64 / (1024.0 * 1024.0)
+        );
 
-                let disposition = format!("attachment; filename=\"{id}.mp4\"");
-                return (
-                    StatusCode::OK,
-                    [
-                        ("Content-Type", "video/mp4"),
-                        ("Content-Disposition", disposition.as_str()),
-                    ],
-                    video_data,
-                )
-                    .into_response();
+        // Handle HTTP Range requests for video seeking
+        if let Some(range_value) = headers.get("range")
+            && let Ok(range_str) = range_value.to_str()
+            && let Ok(parsed_ranges) = http_range_header::parse_range_header(range_str)
+        {
+            match parsed_ranges.validate(video_size as u64) {
+                Ok(ranges) => {
+                    if let Some(range) = ranges.first() {
+                        let start = *range.start() as usize;
+                        let end = *range.end() as usize;
+                        let range_data = video_data.slice(start..=end);
+
+                        return (
+                            StatusCode::PARTIAL_CONTENT,
+                            [
+                                ("Content-Type", "video/mp4".to_string()),
+                                ("Content-Range", format!("bytes {}-{}/{}", start, end, video_size)),
+                                ("Content-Length", (end - start + 1).to_string()),
+                                ("Accept-Ranges", "bytes".to_string()),
+                            ],
+                            range_data,
+                        )
+                            .into_response();
+                    }
+                }
+                Err(_) => {
+                    return (
+                        StatusCode::RANGE_NOT_SATISFIABLE,
+                        [("Content-Range", format!("bytes */{}", video_size))],
+                        Bytes::new(),
+                    )
+                        .into_response();
+                }
             }
         }
+
+        // No range request - send full video
+        let video_data = video_data.clone();
+        return (
+            StatusCode::OK,
+            [
+                ("Content-Type", "video/mp4".to_string()),
+                ("Content-Length", video_size.to_string()),
+                ("Accept-Ranges", "bytes".to_string()),
+            ],
+            video_data,
+        )
+            .into_response();
     }
 
     // Job not found, not done, or no video data available

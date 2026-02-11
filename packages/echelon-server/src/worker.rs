@@ -156,13 +156,24 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
 
     // Wait for ffmpeg to finish after EDOPro closes the frame pipe
     tracing::info!("[{}] Replay finished. Waiting for ffmpeg to finalize...", id);
-    const FFMPEG_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+    // Give ffmpeg enough time to properly finalize the MP4 file (critical for -movflags faststart)
+    const FFMPEG_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
     let ffmpeg_wait = tokio::time::timeout(FFMPEG_SHUTDOWN_TIMEOUT, ffmpeg_child.wait()).await;
-    if ffmpeg_wait.is_err() {
-        if let Some(pid) = ffmpeg_child.id() {
-            _ = kill(unistd::Pid::from_raw(pid.cast_signed()), Signal::SIGINT);
+    match ffmpeg_wait {
+        Ok(Ok(status)) if !status.success() => {
+            tracing::warn!("[{}] ffmpeg exited with status: {:?}", id, status.code());
         }
-        let _ = tokio::time::timeout(FFMPEG_SHUTDOWN_TIMEOUT, ffmpeg_child.wait()).await;
+        Ok(Err(e)) => {
+            return Err(anyhow::anyhow!("Failed to wait for ffmpeg: {e}"));
+        }
+        Err(_) => {
+            tracing::error!("[{}] ffmpeg did not finish within {}s", id, FFMPEG_SHUTDOWN_TIMEOUT.as_secs());
+            if let Some(pid) = ffmpeg_child.id() {
+                _ = kill(unistd::Pid::from_raw(pid.cast_signed()), Signal::SIGTERM);
+            }
+            return Err(anyhow::anyhow!("ffmpeg timeout - video may be corrupted"));
+        }
+        _ => {}
     }
 
     // Check if EDOPro exited with an error (e.g., invalid replay file)
