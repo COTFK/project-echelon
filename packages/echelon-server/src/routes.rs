@@ -9,10 +9,12 @@ use crate::types::ReplayStatus;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::Path;
+use axum::extract::Query;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::http::header::HeaderMap;
 use axum::response::IntoResponse;
+use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -54,10 +56,19 @@ enum StatusResponse {
     NotFound { message: String },
 }
 
+/// Query parameters for the download endpoint.
+#[derive(Deserialize)]
+pub struct DownloadQuery {
+    /// If set to "1", forces download with Content-Disposition: attachment
+    #[serde(default)]
+    pub download: String,
+}
+
 /// Checks for a given replay ID and returns the video data for it (if any).
 pub async fn download(
     State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
     Path(id): Path<Ulid>,
+    Query(params): Query<DownloadQuery>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Download requested.", id);
@@ -115,10 +126,16 @@ pub async fn download(
 
         // No range request - send full video
         let video_data = video_data.clone();
+        let disposition = if params.download == "1" {
+            format!("attachment; filename=\"{id}.mp4\"")
+        } else {
+            format!("inline; filename=\"{id}.mp4\"")
+        };
         return (
             StatusCode::OK,
             [
                 ("Content-Type", "video/mp4".to_string()),
+                ("Content-Disposition", disposition),
                 ("Content-Length", video_size.to_string()),
                 ("Accept-Ranges", "bytes".to_string()),
             ],

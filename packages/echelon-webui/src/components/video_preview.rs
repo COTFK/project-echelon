@@ -25,7 +25,7 @@ pub fn VideoPreview(video_url: String) -> Element {
                     }
                     a {
                         class: "btn btn-primary px-3",
-                        href: "{video_url}",
+                        href: "{video_url}?download=1",
                         download: true,
                         svg {
                             xmlns: "http://www.w3.org/2000/svg",
