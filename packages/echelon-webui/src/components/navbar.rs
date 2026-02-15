@@ -13,7 +13,7 @@ pub fn NavBar() -> Element {
                 class: "btn btn-ghost text-xl",
                 img {
                     class: "size-8",
-                    src: asset!("/assets/favicon.png")
+                    src: asset!("/assets/logo.png")
                 }
                 "Project Echelon"
             }
