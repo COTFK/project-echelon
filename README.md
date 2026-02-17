@@ -42,6 +42,8 @@ The project consists of three independent services:
   - Real-time job status tracking
   - Video download link
 
+Additionally, a custom fork of EDOPro was required to support Echelon - more about that here: https://git.arqalite.org/COTFK/project-echelon-edopro
+
 ## Local Development
 
 ### Prerequisites
