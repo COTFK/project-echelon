@@ -1,7 +1,9 @@
 //! The [`worker()`] and [`cleanup()`] functions - background tasks for processing and maintenance.
 
-use crate::commands::create_frame_pipe;
+use crate::commands::capture_audio_pipe;
+use crate::commands::create_named_pipe;
 use crate::commands::launch_edopro;
+use crate::commands::mux_audio_into_video;
 use crate::commands::record_display;
 use crate::commands::get_video_duration_secs;
 use crate::types::Replay;
@@ -126,27 +128,52 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     let output_path_str = output_file
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid output file path"))?;
+    // Intermediate video-only file (no audio), muxed into output_file afterwards
+    let video_only_file = tmp_dir.path().join(format!("{id}_video.mp4"));
+    let video_only_str = video_only_file
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid video-only file path"))?;
+    // Raw PCM audio captured from the audio pipe
+    let raw_audio_file = tmp_dir.path().join(format!("{id}.pcm"));
+    let raw_audio_str = raw_audio_file
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid raw audio file path"))?;
     let frame_pipe_path = tmp_dir.path().join("frames.pipe");
     let frame_pipe_str = frame_pipe_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid frame pipe path"))?;
+    let audio_pipe_path = tmp_dir.path().join("audio.pipe");
+    let audio_pipe_str = audio_pipe_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid audio pipe path"))?;
 
-    create_frame_pipe(frame_pipe_str)
+    create_named_pipe(frame_pipe_str)
         .map_err(|e| anyhow::anyhow!("Failed to create frame pipe: {e}"))?;
+    create_named_pipe(audio_pipe_str)
+        .map_err(|e| anyhow::anyhow!("Failed to create audio pipe: {e}"))?;
 
-    // Start recording from the frame pipe before launching EDOPro to avoid blocking on FIFO open
-    tracing::info!("[{}] Starting frame recording...", id);
-    let mut ffmpeg_child = record_display(output_path_str, frame_pipe_str)
+    // Start recording from the pipes before launching EDOPro to avoid blocking on FIFO open
+    tracing::info!("[{}] Starting frame and audio recording...", id);
+    let mut ffmpeg_child = record_display(video_only_str, frame_pipe_str)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
+
+    // Capture audio pipe to a raw PCM file concurrently with video recording.
+    // Keeping this separate from ffmpeg avoids FIFO ordering deadlocks.
+    let audio_handle = tokio::spawn(capture_audio_pipe(
+        audio_pipe_str.to_owned(),
+        raw_audio_str.to_owned(),
+        id.to_string(),
+    ));
 
     let edopro_log_path = tmp_dir.path().join("edopro.stderr.log");
     let edopro_log_str = edopro_log_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid EDOPro log file path"))?;
-    let mut edopro_process = launch_edopro(replay_path_str, frame_pipe_str, edopro_log_str)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
+    let mut edopro_process =
+        launch_edopro(replay_path_str, frame_pipe_str, audio_pipe_str, edopro_log_str)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
 
     // Wait for EDOPro to exit
     let edopro_exit_status = edopro_process
@@ -195,6 +222,18 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
             stderr
         ));
     }
+
+    // Ensure audio capture finished before muxing
+    audio_handle
+        .await
+        .map_err(|e| anyhow::anyhow!("Audio capture task panicked: {e}"))?
+        .map_err(|e| anyhow::anyhow!("Audio capture failed: {e}"))?;
+
+    // Mux video + audio into the final output (video stream is copied, no re-encode)
+    tracing::info!("[{}] Muxing audio into video...", id);
+    mux_audio_into_video(video_only_str, raw_audio_str, output_path_str)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to mux audio into video: {e}"))?;
 
     // Load output file into memory and clear replay data to free memory
     let video_data = tokio::fs::read(&output_file)

@@ -27,7 +27,7 @@ RUN cargo build --release
 FROM debian:trixie-slim AS runtime
 
 RUN apt-get update && apt-get install -y \
-    ca-certificates curl xvfb ffmpeg \
+    ca-certificates curl xvfb ffmpeg pulseaudio \
     && rm -rf /var/lib/apt/lists/*
 
 ADD https://github.com/ProjectIgnis/edopro-assets/releases/download/41.0.2/ProjectIgnis-EDOPro-41.0.2-linux.tar.gz /usr/local/

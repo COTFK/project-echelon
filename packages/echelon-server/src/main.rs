@@ -17,6 +17,7 @@ use axum::http::{Method, Request, Response, StatusCode};
 use axum::middleware::{self, Next};
 use axum::routing::get;
 use axum::routing::post;
+use commands::start_pulseaudio;
 use commands::start_xvfb;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -40,6 +41,12 @@ async fn main() {
     // Start xvfb - we use it to avoid dependencies on host hardware having a GPU/display device
     let Ok(xvfb_process) = start_xvfb().await else {
         tracing::error!("Unable to start Xvfb - check that you have it installed on your system.");
+        return;
+    };
+
+    // Start PulseAudio with a null sink - provides a virtual audio device for EDOPro
+    let Ok(pulseaudio_process) = start_pulseaudio().await else {
+        tracing::error!("Unable to start PulseAudio - check that you have it installed on your system.");
         return;
     };
 
@@ -74,13 +81,16 @@ async fn main() {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(close_gracefully(xvfb_process))
+    .with_graceful_shutdown(close_gracefully(xvfb_process, pulseaudio_process))
     .await
     .expect("Axum server should never raise an error");
 }
 
-/// Gracefully close the Xvfb process on SIGINT or SIGTERM.
-async fn close_gracefully(mut xvfb_process: tokio::process::Child) {
+/// Gracefully close Xvfb and PulseAudio on SIGINT or SIGTERM.
+async fn close_gracefully(
+    mut xvfb_process: tokio::process::Child,
+    mut pulseaudio_process: tokio::process::Child,
+) {
     use tokio::signal::unix::{SignalKind, signal};
 
     let mut sigint = signal(SignalKind::interrupt()).expect("Failed to setup SIGINT handler");
@@ -92,11 +102,17 @@ async fn close_gracefully(mut xvfb_process: tokio::process::Child) {
             if let Err(e) = xvfb_process.kill().await {
                 tracing::error!("Failed to kill Xvfb process: {}", e);
             }
+            if let Err(e) = pulseaudio_process.kill().await {
+                tracing::error!("Failed to kill PulseAudio process: {}", e);
+            }
         }
         _ = sigterm.recv() => {
             tracing::info!("Received SIGTERM, shutting down...");
             if let Err(e) = xvfb_process.kill().await {
                 tracing::error!("Failed to kill Xvfb process: {}", e);
+            }
+            if let Err(e) = pulseaudio_process.kill().await {
+                tracing::error!("Failed to kill PulseAudio process: {}", e);
             }
         }
     }
