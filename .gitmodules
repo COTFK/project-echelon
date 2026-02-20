@@ -1,0 +1,3 @@
+[submodule "packages/echelon-edopro"]
+	path = packages/echelon-edopro
+	url = https://git.arqalite.org/COTFK/project-echelon-edopro.git
