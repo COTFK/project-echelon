@@ -40,8 +40,5 @@ if [[ -n "$VERSION" ]]; then
     docker push "${REGISTRY}/echelon-webui:${VERSION}"
 fi
 
-caprover deploy -i "${REGISTRY}/echelon-server:latest" -n arqalite -a echelon-server
-caprover deploy -i "${REGISTRY}/echelon-discord:latest" -n arqalite -a echelon-discord
-caprover deploy -i "${REGISTRY}/echelon-webui:latest" -n arqalite -a echelon
-
 echo "✅ All images built and pushed successfully!"
+echo "   Run ./deploy.sh ${VERSION:-latest} to deploy."
