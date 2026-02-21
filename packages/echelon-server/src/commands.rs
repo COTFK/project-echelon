@@ -57,7 +57,7 @@ pub async fn launch_edopro(
         DISPLAY_ID
     );
 
-    let mut command = TokioCommand::new(edopro_path);
+    let mut command = TokioCommand::new(Path::new(&edopro_path).join("EDOPro"));
     command.args(["-i-want-to-be-admin", "-replay", replay_file_path, "-q"]);
     command.env("DISPLAY", DISPLAY_ID);
     command.env("PULSE_SERVER", PULSE_SERVER);

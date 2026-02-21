@@ -3,6 +3,7 @@
 use crate::estimation::estimate_duration;
 use crate::estimation::load_replay_packets;
 use axum::body::Bytes;
+use serde::Deserialize;
 
 /// The processing status of a video.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -19,6 +20,14 @@ pub enum ReplayStatus {
     Queued,
 }
 
+/// Replay configuration.
+#[derive(Deserialize, Clone, PartialEq, PartialOrd, Debug)]
+pub struct ReplayConfig {
+    /// Whether to use top-down view.
+    #[serde(default)]
+    pub top_down_view: bool,
+}
+
 pub enum ReplayError {
     /// Failed the magic number check.
     MagicError,
@@ -29,6 +38,7 @@ pub enum ReplayError {
 /// A tracked *.yrpX replay file.
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub struct Replay {
+    pub config: ReplayConfig,
     /// The replay file contents.
     pub data: Option<Bytes>,
     /// The video data, if any.
@@ -43,8 +53,9 @@ pub struct Replay {
 
 impl Replay {
     /// Creates an empty [`Replay`] with no data, in Created status.
-    pub fn new() -> Self {
+    pub fn new(config: ReplayConfig) -> Self {
         Self {
+            config: config,
             data: None,
             video: None,
             estimated_duration: None,

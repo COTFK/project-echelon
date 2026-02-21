@@ -11,6 +11,7 @@ use crate::types::ReplayStatus;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd;
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tempfile::tempdir;
@@ -97,14 +98,18 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
 
     let temp_replay_path = format!("{id}.yrpX");
     let replay_file_path = tmp_dir.path().join(temp_replay_path);
-    let replay_data = state
-        .write()
-        .await
+
+    // Get replay details
+    let mut lock = state.write().await;
+    let job = lock
         .get_mut(&id)
-        .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?
+        .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?;
+    let replay_data = job
         .data
         .clone()
-        .expect("No replay data found - this should not happen!");
+        .ok_or_else(|| anyhow::anyhow!("No replay data found in job? This should not happen."))?;
+    let replay_config = job.config.clone();
+    drop(lock);
 
     // Write replay_file to a temporary file
     let replay_size = replay_data.len();
@@ -117,6 +122,30 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         replay_size,
         replay_file_path
     );
+
+    // Refresh config
+    let edopro_path = std::env::var("EDOPRO_PATH")?;
+    let config_dir = Path::new(&edopro_path).join("config");
+    let backup_path = config_dir.join("system.conf.bak");
+    let config_path = config_dir.join("system.conf");
+    let _ = tokio::fs::copy(backup_path, config_path.clone()).await;
+
+    // Update config with settings
+    let config_content = tokio::fs::read_to_string(&config_path)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read config file: {e}"))?;
+
+    // Set top-down view
+    let updated_content = if replay_config.top_down_view {
+        config_content.replace("topdown_view = 0", "topdown_view = 1")
+    } else {
+        config_content.replace("topdown_view = 1", "topdown_view = 0")
+    };
+
+    tokio::fs::write(&config_path, updated_content)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to write config file: {e}"))?;
+    tracing::debug!("[{}] Updated config: topdown_view = 1", id);
 
     // Prepare and launch EDOPro
     tracing::info!("[{}] Launching EDOPro in replay mode...", id);

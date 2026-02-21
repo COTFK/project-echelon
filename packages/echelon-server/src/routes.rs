@@ -7,6 +7,7 @@
 use crate::types::Replay;
 use crate::types::ReplayError;
 use crate::types::ReplayStatus;
+use crate::types::ReplayConfig;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::Path;
@@ -171,9 +172,7 @@ pub async fn status(
 
     if let Some(job) = lock.get(&id) {
         match job.status {
-            ReplayStatus::Created => {
-                (StatusCode::OK, Json(StatusResponse::Created))
-            }
+            ReplayStatus::Created => (StatusCode::OK, Json(StatusResponse::Created)),
             ReplayStatus::Queued => {
                 // Collect queued jobs to calculate position and ETA
                 let queued_jobs: Vec<_> = lock
@@ -192,7 +191,9 @@ pub async fn status(
                         + queued_jobs
                             .iter()
                             .take(position + 1)
-                            .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0)))
+                            .map(|(_, job)| {
+                                estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0))
+                            })
                             .sum::<u32>();
 
                     (
@@ -214,7 +215,8 @@ pub async fn status(
                 }
             }
             ReplayStatus::Recording => {
-                let estimate_minutes = estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0));
+                let estimate_minutes =
+                    estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0));
 
                 (
                     StatusCode::OK,
@@ -244,6 +246,7 @@ pub async fn status(
 
 pub async fn create_replay(
     State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
+    Json(body): Json<ReplayConfig>
 ) -> impl IntoResponse {
     let id = Ulid::new();
 
@@ -275,7 +278,7 @@ pub async fn create_replay(
         MAX_QUEUE_SIZE
     );
 
-    let replay = Replay::new();
+    let replay = Replay::new(body);
     lock.insert(id, replay);
 
     (StatusCode::OK, id.to_string())
@@ -314,7 +317,6 @@ pub async fn upload(
                     String::from("Task is already finished. Create a new task to upload a replay."),
                 );
             }
-
 
             let upload_result = replay.add_replay_data(body);
 
