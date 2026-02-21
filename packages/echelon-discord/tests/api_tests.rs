@@ -1,6 +1,7 @@
 use echelon_discord::api::{
     ReplayStatus, create_replay, download_video, get_replay_status, upload_replay,
 };
+use serde_json::json;
 
 #[test]
 fn test_replay_status_parsing_queued() {
@@ -68,6 +69,12 @@ async fn test_create_replay_success() {
 
     let _mock = server
         .mock("POST", "/create")
+        .match_body(mockito::Matcher::Json(json!({
+            "top_down_view": false,
+            "swap_players": false,
+            "game_speed": 1.0,
+            "video_preset": "balanced"
+        })))
         .with_status(200)
         .with_body("replay-id-123")
         .expect(1)
@@ -85,6 +92,12 @@ async fn test_create_replay_server_error() {
 
     let _mock = server
         .mock("POST", "/create")
+        .match_body(mockito::Matcher::Json(json!({
+            "top_down_view": false,
+            "swap_players": false,
+            "game_speed": 1.0,
+            "video_preset": "balanced"
+        })))
         .with_status(500)
         .expect(1)
         .create();

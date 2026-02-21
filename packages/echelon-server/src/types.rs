@@ -73,6 +73,7 @@ pub struct ReplayConfig {
     pub video_preset: VideoPreset,
 }
 
+#[derive(Debug)]
 pub enum ReplayError {
     /// Failed the magic number check.
     MagicError,

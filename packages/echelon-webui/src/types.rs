@@ -72,6 +72,30 @@ impl Default for ReplayConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{ReplayConfig, VideoPreset};
+
+    #[test]
+    fn replay_config_default_uses_balanced_preset() {
+        assert_eq!(ReplayConfig::default().video_preset, VideoPreset::Balanced);
+    }
+
+    #[test]
+    fn video_preset_serialization_strings_are_stable() {
+        assert_eq!(VideoPreset::FileSize.as_str(), "file_size");
+        assert_eq!(VideoPreset::Balanced.as_str(), "balanced");
+        assert_eq!(VideoPreset::Quality.as_str(), "quality");
+    }
+
+    #[test]
+    fn video_preset_from_str_handles_unknown_and_known_values() {
+        assert_eq!(VideoPreset::from_str("file_size"), VideoPreset::FileSize);
+        assert_eq!(VideoPreset::from_str("quality"), VideoPreset::Quality);
+        assert_eq!(VideoPreset::from_str("banana"), VideoPreset::Balanced);
+    }
+}
+
 /// Represents the current status of a replay processing job.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub enum ReplayStatus {
