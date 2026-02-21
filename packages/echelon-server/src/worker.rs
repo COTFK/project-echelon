@@ -183,9 +183,10 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
 
     // Start recording from the pipes before launching EDOPro to avoid blocking on FIFO open
     tracing::info!("[{}] Starting frame and audio recording...", id);
-    let mut ffmpeg_child = record_display(video_only_str, frame_pipe_str)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
+    let mut ffmpeg_child =
+        record_display(video_only_str, frame_pipe_str, replay_config.video_preset)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to start video recording: {e}"))?;
 
     // Capture audio pipe to a raw PCM file concurrently with video recording.
     // Keeping this separate from ffmpeg avoids FIFO ordering deadlocks.

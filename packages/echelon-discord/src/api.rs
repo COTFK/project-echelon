@@ -4,10 +4,10 @@
 
 use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::env;
 use std::sync::OnceLock;
 use std::time::Duration;
-use serde_json::json;
 
 /// Cached server URL, initialized once on first access.
 static SERVER_URL: OnceLock<String> = OnceLock::new();
@@ -49,7 +49,9 @@ pub async fn create_replay(server_url: &str) -> Result<String, String> {
     let client = create_http_client();
     let create_url = format!("{}/create", server_url);
 
-    let mut request = client.post(&create_url).header("Content-Type", "application/json");
+    let mut request = client
+        .post(&create_url)
+        .header("Content-Type", "application/json");
 
     // Add bot secret token if configured (to bypass rate limiting)
     if let Ok(bot_secret) = env::var("BOT_SECRET") {
@@ -165,9 +167,8 @@ pub async fn download_video(server_url: &str, id: &str) -> Result<Vec<u8>, Strin
 /// Panics if `ECHELON_SERVER_URL` is not set. Call [`validate_server_url`] at startup
 /// to fail fast instead of on the first user command.
 pub fn get_server_url() -> &'static str {
-    SERVER_URL.get_or_init(|| {
-        env::var("ECHELON_SERVER_URL").expect("ECHELON_SERVER_URL must be set")
-    })
+    SERVER_URL
+        .get_or_init(|| env::var("ECHELON_SERVER_URL").expect("ECHELON_SERVER_URL must be set"))
 }
 
 /// Validates that `ECHELON_SERVER_URL` is set. Call at startup to fail fast.
