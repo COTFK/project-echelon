@@ -1,6 +1,6 @@
 //! API client for communicating with the replay processing server.
 
-use crate::types::{API_BASE_URL, ReplayError, ReplayStatus, StatusResponse};
+use crate::types::{API_BASE_URL, ReplayConfig, ReplayError, ReplayStatus, StatusResponse};
 
 /// API client for the replay server.
 #[derive(Clone)]
@@ -25,15 +25,51 @@ impl ApiClient {
         }
     }
 
-    /// Uploads a replay file to the server.
+    /// Creates a new replay job with the given configuration.
+    ///
+    /// # Returns
+    /// - `Ok(replay_id)` on successful creation
+    /// - `Err(ReplayError)` on failure
+    pub async fn create_replay(&self, config: &ReplayConfig) -> Result<String, ReplayError> {
+        let response = self
+            .client
+            .post(format!("{}/create", self.base_url))
+            .json(config)
+            .send()
+            .await
+            .map_err(|e| ReplayError::Server(e.to_string()))?;
+
+        match response.status().as_u16() {
+            200 => response
+                .text()
+                .await
+                .map_err(|e| ReplayError::Server(e.to_string())),
+            400 => Err(ReplayError::Validation(
+                response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Invalid configuration".to_string()),
+            )),
+            503 => Err(ReplayError::QueueFull),
+            status => {
+                let message = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| format!("HTTP {status}"));
+                Err(ReplayError::Server(message))
+            }
+        }
+    }
+
+    /// Uploads a replay file to the server for a given job ID.
     ///
     /// # Returns
     /// - `Ok(replay_id)` on successful upload
     /// - `Err(ReplayError)` on failure
-    pub async fn upload_replay(&self, data: Vec<u8>) -> Result<String, ReplayError> {
+    pub async fn upload_replay(&self, task_id: &str, data: Vec<u8>) -> Result<String, ReplayError> {
         let response = self
             .client
-            .post(format!("{}/upload", self.base_url))
+            .post(format!("{}/upload?task_id={}", self.base_url, task_id))
             .body(data)
             .send()
             .await

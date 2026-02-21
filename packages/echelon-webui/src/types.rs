@@ -1,6 +1,6 @@
 //! Type definitions for the replay upload application.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Maximum allowed file size in bytes (10MB).
 pub const MAX_FILE_SIZE: usize = 10 * 1024 * 1024;
@@ -14,6 +14,27 @@ pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
     Some(url) => url,
     None => "http://localhost:3000",
 };
+
+/// Replay configuration sent to the server.
+#[derive(Clone, Debug, Serialize)]
+pub struct ReplayConfig {
+    /// Whether to use top-down view.
+    pub top_down_view: bool,
+    /// Whether to swap players for recording.
+    pub swap_players: bool,
+    /// Game speed multiplier (0.1x to 10.0x).
+    pub game_speed: f64,
+}
+
+impl Default for ReplayConfig {
+    fn default() -> Self {
+        Self {
+            top_down_view: false,
+            swap_players: false,
+            game_speed: 1.0,
+        }
+    }
+}
 
 /// Represents the current status of a replay processing job.
 #[derive(Clone, PartialEq, Debug, Default)]

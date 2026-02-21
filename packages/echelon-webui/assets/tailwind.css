@@ -6623,6 +6623,9 @@
       }
     }
   }
+  .cursor-pointer {
+    cursor: pointer;
+  }
   .resize {
     resize: both;
   }
@@ -6762,6 +6765,9 @@
   }
   .gap-2 {
     gap: calc(var(--spacing) * 2);
+  }
+  .gap-3 {
+    gap: calc(var(--spacing) * 3);
   }
   .gap-4 {
     gap: calc(var(--spacing) * 4);
@@ -7329,6 +7335,9 @@
         }
       }
     }
+  }
+  .bg-base-100 {
+    background-color: var(--color-base-100);
   }
   .bg-base-200 {
     background-color: var(--color-base-200);

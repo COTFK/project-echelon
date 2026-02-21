@@ -87,7 +87,7 @@ pub async fn launch_edopro(
         .stderr(Stdio::from(log_file_err))
         .spawn()?;
 
-    tracing::debug!("EDOPro process started with PID: {:?}", child.id());
+    tracing::debug!("EDOPro process has started with PID: {:?}", child.id());
     Ok(child)
 }
 

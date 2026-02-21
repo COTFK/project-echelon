@@ -1,30 +1,47 @@
-# Build stage - compile Dioxus web app
-FROM rust:bookworm AS builder
+##### Build echelon-webui
+
+FROM rust:trixie AS chef
 WORKDIR /app
 
-# Install Dioxus CLI and wasm target
-RUN cargo install dioxus-cli && \
-    rustup target add wasm32-unknown-unknown
+# Install cargo-chef
+RUN cargo install cargo-chef
 
-# Copy workspace files
-COPY packages/echelon-webui ./packages/echelon-webui
+# Install Dioxus CLI
+RUN curl -sSL https://dioxus.dev/install.sh | bash
+
+# Planner stage to analyze dependencies
+FROM chef AS planner
+COPY packages/echelon-webui .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Builder stage to compile the application
+FROM chef AS builder
+ARG CARGO_BUILD_JOBS=8
+ENV CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS
+
+# Cache dependencies
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Copy source code last (most likely to change)
+COPY packages/echelon-webui .
+
 
 # API URL - defaults to production, can be overridden
 ARG API_BASE_URL="https://echelon-server.arqalite.org"
 ENV API_BASE_URL=$API_BASE_URL
 
 # Build the web app
-WORKDIR /app/packages/echelon-webui
 RUN dx bundle --platform web --release --debug-symbols=false --out-dir bundle
 
 # Runtime stage - serve with nginx
 FROM nginx:alpine AS runtime
 
 # Copy built assets to nginx
-COPY --from=builder /app/packages/echelon-webui/bundle/public /usr/share/nginx/html
+COPY --from=builder /app/bundle/public /usr/share/nginx/html
 
 # Copy custom nginx config
-COPY --from=builder /app/packages/echelon-webui/config/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/config/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
