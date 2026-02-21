@@ -3,7 +3,7 @@
 use crate::estimation::estimate_duration;
 use crate::estimation::load_replay_packets;
 use axum::body::Bytes;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// The processing status of a video.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -20,15 +20,36 @@ pub enum ReplayStatus {
     Queued,
 }
 
+fn deserialize_game_speed<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    const MIN_GAME_SPEED: f64 = 0.1;
+    const MAX_GAME_SPEED: f64 = 10.0;
+
+    let value = f64::deserialize(deserializer)?;
+
+    if value < MIN_GAME_SPEED || value > MAX_GAME_SPEED {
+        return Err(serde::de::Error::custom(format!(
+            "game_speed must be between {}x and {}x (got {}x)",
+            MIN_GAME_SPEED, MAX_GAME_SPEED, value
+        )));
+    }
+
+    Ok(value)
+}
+
 /// Replay configuration.
 #[derive(Deserialize, Clone, PartialEq, PartialOrd, Debug)]
 pub struct ReplayConfig {
     /// Whether to use top-down view.
-    #[serde(default)]
     pub top_down_view: bool,
     /// Whether to swap players for recording (swap viewer/player sides).
-    #[serde(default)]
     pub swap_players: bool,
+    /// Optional game speed multiplier for offline replays (0.1x to 10.0x).
+    /// Values >1.0 speed up gameplay; values <1.0 slow it down. Defaults to 1.0.
+    #[serde(deserialize_with = "deserialize_game_speed")]
+    pub game_speed: f64,
 }
 
 pub enum ReplayError {
@@ -87,5 +108,4 @@ impl Replay {
     pub fn mark_replay_as_ready(&mut self) -> () {
         self.status = ReplayStatus::Queued;
     }
-
 }

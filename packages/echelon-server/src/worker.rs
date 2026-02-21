@@ -205,6 +205,7 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         audio_pipe_str,
         edopro_log_str,
         replay_config.swap_players,
+        replay_config.game_speed,
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;

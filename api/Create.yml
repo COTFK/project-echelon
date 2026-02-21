@@ -11,7 +11,8 @@ http:
     data: |-
       {
         "top_down_view": false,
-        "swap_players": true
+        "swap_players": false,
+        "game_speed": 1.0
       }
   auth: inherit
 
