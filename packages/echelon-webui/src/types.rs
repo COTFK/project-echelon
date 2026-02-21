@@ -15,6 +15,39 @@ pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
     None => "http://localhost:3000",
 };
 
+/// Video encoding presets that can be requested when uploading a replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoPreset {
+    FileSize,
+    Balanced,
+    Quality,
+}
+
+impl VideoPreset {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VideoPreset::FileSize => "file_size",
+            VideoPreset::Balanced => "balanced",
+            VideoPreset::Quality => "quality",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "file_size" => VideoPreset::FileSize,
+            "quality" => VideoPreset::Quality,
+            _ => VideoPreset::Balanced,
+        }
+    }
+}
+
+impl Default for VideoPreset {
+    fn default() -> Self {
+        VideoPreset::Balanced
+    }
+}
+
 /// Replay configuration sent to the server.
 #[derive(Clone, Debug, Serialize)]
 pub struct ReplayConfig {
@@ -24,6 +57,8 @@ pub struct ReplayConfig {
     pub swap_players: bool,
     /// Game speed multiplier (0.1x to 10.0x).
     pub game_speed: f64,
+    /// Requested video encoding preset.
+    pub video_preset: VideoPreset,
 }
 
 impl Default for ReplayConfig {
@@ -32,6 +67,7 @@ impl Default for ReplayConfig {
             top_down_view: false,
             swap_players: false,
             game_speed: 1.0,
+            video_preset: VideoPreset::Balanced,
         }
     }
 }

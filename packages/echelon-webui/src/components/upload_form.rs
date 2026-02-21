@@ -10,7 +10,7 @@ use crate::api::{ApiClient, validate_replay_file};
 use crate::components::Hero;
 use crate::components::status_display::{LoadingSpinner, StatusDisplay};
 use crate::components::video_preview::VideoPreview;
-use crate::types::{ReplayConfig, REPLAY_EXTENSION, ReplayError, ReplayStatus};
+use crate::types::{REPLAY_EXTENSION, ReplayConfig, ReplayError, ReplayStatus, VideoPreset};
 
 /// Main upload form component.
 #[component]
@@ -25,6 +25,7 @@ pub fn UploadForm() -> Element {
     let mut top_down_view = use_signal(|| false);
     let mut swap_players = use_signal(|| false);
     let mut game_speed = use_signal(|| 1.0);
+    let mut video_preset = use_signal(|| VideoPreset::Balanced);
     let mut show_advanced = use_signal(|| false);
 
     // Poll status while processing
@@ -90,6 +91,7 @@ pub fn UploadForm() -> Element {
                     top_down_view: top_down_view(),
                     swap_players: swap_players(),
                     game_speed: game_speed(),
+                    video_preset: video_preset(),
                 };
 
                 let task_id = match api_client.create_replay(&config).await {
@@ -201,6 +203,16 @@ pub fn UploadForm() -> Element {
                                     option { value: "3.0", "Very Fast (3x)" }
                                     option { value: "10.0", "Timelapse (10x)" }
                                 }
+                                label { class: "label", span { class: "label-text text-sm", "Video preset" } }
+                                select {
+                                    class: "select select-bordered select-sm w-full",
+                                    onchange: move |evt| {
+                                        video_preset.set(VideoPreset::from_str(&evt.value()));
+                                    },
+                                    option { value: VideoPreset::FileSize.as_str(), "File-size optimized" }
+                                    option { value: VideoPreset::Balanced.as_str(), selected: true, "Balanced (default)" }
+                                    option { value: VideoPreset::Quality.as_str(), "High quality" }
+                                }
                             }
                         }
 
@@ -233,6 +245,7 @@ pub fn UploadForm() -> Element {
                                 top_down_view.set(false);
                                 swap_players.set(false);
                                 game_speed.set(1.0);
+                                video_preset.set(VideoPreset::Balanced);
                                 show_advanced.set(false);
                             },
                             "Try again"
@@ -246,6 +259,7 @@ pub fn UploadForm() -> Element {
                                 top_down_view.set(false);
                                 swap_players.set(false);
                                 game_speed.set(1.0);
+                                video_preset.set(VideoPreset::Balanced);
                                 show_advanced.set(false);
                             },
                             "Convert another video"
