@@ -7,6 +7,7 @@ mod worker;
 use crate::routes::download;
 use crate::routes::status;
 use crate::routes::upload;
+use crate::routes::create_replay;
 use crate::types::Replay;
 use crate::worker::cleanup;
 use crate::worker::worker;
@@ -248,6 +249,7 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
     // Rate-limited upload route (nested router so rate limit only applies here)
     let upload_router = Router::new()
         .route("/upload", post(upload))
+        .route("/create", post(create_replay))
         .layer(GovernorLayer::new(rate_limit_config))
         .layer(middleware::from_fn(log_rate_limit_middleware));
 

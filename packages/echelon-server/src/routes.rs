@@ -5,6 +5,7 @@
 //! [`download()`] grabs the finished video from the app state and sends it to the caller.
 
 use crate::types::Replay;
+use crate::types::ReplayError;
 use crate::types::ReplayStatus;
 use axum::Json;
 use axum::body::Bytes;
@@ -36,6 +37,9 @@ fn estimate_minutes_from_seconds(seconds: f64) -> u32 {
 #[derive(Serialize)]
 #[serde(tag = "status")]
 enum StatusResponse {
+    /// Job is created and awaiting replay upload.
+    #[serde(rename = "created")]
+    Created,
     /// Job is queued and waiting to be processed.
     #[serde(rename = "queued")]
     Queued {
@@ -104,7 +108,10 @@ pub async fn download(
                             StatusCode::PARTIAL_CONTENT,
                             [
                                 ("Content-Type", "video/mp4".to_string()),
-                                ("Content-Range", format!("bytes {}-{}/{}", start, end, video_size)),
+                                (
+                                    "Content-Range",
+                                    format!("bytes {}-{}/{}", start, end, video_size),
+                                ),
                                 ("Content-Length", (end - start + 1).to_string()),
                                 ("Accept-Ranges", "bytes".to_string()),
                             ],
@@ -161,9 +168,12 @@ pub async fn status(
 ) -> impl IntoResponse {
     tracing::debug!("[{}] Status check requested.", id);
     let lock = jobs.read().await;
-    
+
     if let Some(job) = lock.get(&id) {
         match job.status {
+            ReplayStatus::Created => {
+                (StatusCode::OK, Json(StatusResponse::Created))
+            }
             ReplayStatus::Queued => {
                 // Collect queued jobs to calculate position and ETA
                 let queued_jobs: Vec<_> = lock
@@ -173,7 +183,7 @@ pub async fn status(
                 let recording_estimate = lock
                     .values()
                     .find(|job| job.status == ReplayStatus::Recording)
-                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration))
+                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0)))
                     .unwrap_or(0);
 
                 if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
@@ -182,7 +192,7 @@ pub async fn status(
                         + queued_jobs
                             .iter()
                             .take(position + 1)
-                            .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration))
+                            .map(|(_, job)| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0)))
                             .sum::<u32>();
 
                     (
@@ -204,7 +214,7 @@ pub async fn status(
                 }
             }
             ReplayStatus::Recording => {
-                let estimate_minutes = estimate_minutes_from_seconds(job.estimated_duration);
+                let estimate_minutes = estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0));
 
                 (
                     StatusCode::OK,
@@ -215,7 +225,10 @@ pub async fn status(
             ReplayStatus::Error => (
                 StatusCode::OK,
                 Json(StatusResponse::Error {
-                    message: job.error_message.clone().unwrap_or_else(|| String::from("An error has occurred.")),
+                    message: job
+                        .error_message
+                        .clone()
+                        .unwrap_or_else(|| String::from("An error has occurred.")),
                 }),
             ),
         }
@@ -229,44 +242,10 @@ pub async fn status(
     }
 }
 
-/// Receives a replay file and adds it to the processing queue.
-pub async fn upload(
+pub async fn create_replay(
     State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
-    body: Bytes,
 ) -> impl IntoResponse {
     let id = Ulid::new();
-    let file_size = body.len();
-
-    tracing::info!(
-        "[{}] Received replay file. Size: {} bytes ({:.2} KB).",
-        id,
-        file_size,
-        file_size as f64 / 1024.0
-    );
-
-    // Validate and parse the replay file before acquiring the lock
-    let replay = match Replay::new(body) {
-        Ok(replay) => replay,
-        Err(e) => {
-            tracing::error!("[{}] Failed to parse replay file: {}", id, e);
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Invalid replay file: {}", e),
-            );
-        }
-    };
-
-    // Additional basic validation check
-    if !replay.is_replay_file() {
-        tracing::error!(
-            "[{}] Invalid replay file format (magic bytes check failed).",
-            id
-        );
-        return (
-            StatusCode::BAD_REQUEST,
-            String::from("File is not a *.yrpX file."),
-        );
-    }
 
     let mut lock = jobs.write().await;
 
@@ -290,12 +269,79 @@ pub async fn upload(
     }
 
     tracing::info!(
-        "[{}] File is valid - adding to queue. Queue size: {}/{}.",
+        "[{}] Queue size: {}/{} - adding task to queue.",
         id,
         current_queue_size + 1,
         MAX_QUEUE_SIZE
     );
+
+    let replay = Replay::new();
     lock.insert(id, replay);
 
     (StatusCode::OK, id.to_string())
+}
+
+/// Query parameters for the upload endpoint.
+#[derive(Deserialize)]
+pub struct UploadQuery {
+    #[serde(default)]
+    pub task_id: Ulid,
+}
+
+/// Receives a replay file and adds it to the processing queue.
+pub async fn upload(
+    Query(params): Query<UploadQuery>,
+    State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
+    body: Bytes,
+) -> impl IntoResponse {
+    let file_size = body.len();
+
+    tracing::info!(
+        "[{}] Received replay file. Size: {} bytes ({:.2} KB).",
+        params.task_id,
+        file_size,
+        file_size as f64 / 1024.0
+    );
+
+    let mut lock = jobs.write().await;
+    let entry = lock.get_mut(&params.task_id);
+
+    match entry {
+        Some(replay) => {
+            if replay.status != ReplayStatus::Created {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    String::from("Task is already finished. Create a new task to upload a replay."),
+                );
+            }
+
+
+            let upload_result = replay.add_replay_data(body);
+
+            match upload_result {
+                Ok(()) => {
+                    replay.mark_replay_as_ready();
+                    return (StatusCode::OK, String::new());
+                }
+                Err(ReplayError::MagicError) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        String::from("File is not a *.yrpX file."),
+                    );
+                }
+                Err(ReplayError::PacketError) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid replay file - make sure it is not corrupted."),
+                    );
+                }
+            }
+        }
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                String::from("Task ID not found - please create a new task before uploading."),
+            );
+        }
+    }
 }
