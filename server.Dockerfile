@@ -30,14 +30,18 @@ RUN cargo build --release
 FROM gcc:15 AS edopro-builder
 WORKDIR /edopro
 
-COPY packages/echelon-edopro /edopro/
-
 RUN apt update && apt install -y curl xz-utils p7zip-full \
     unzip build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+COPY packages/echelon-edopro/travis/ travis/
+COPY packages/echelon-edopro/env.sh env.sh
+
 RUN . ./env.sh && travis/dependencies.sh
 RUN . ./env.sh && travis/install-premake5.sh
+
+COPY packages/echelon-edopro/ /edopro/
+
 RUN . ./env.sh && travis/build.sh
 
 ##### Create server image
