@@ -64,7 +64,8 @@ pub async fn create_replay(server_url: &str) -> Result<String, String> {
     let body = json!({
         "top_down_view": false,
         "swap_players": false,
-        "game_speed": 1.0
+        "game_speed": 1.0,
+        "video_preset": "balanced"
     });
 
     let response = request
