@@ -26,6 +26,9 @@ pub struct ReplayConfig {
     /// Whether to use top-down view.
     #[serde(default)]
     pub top_down_view: bool,
+    /// Whether to swap players for recording (swap viewer/player sides).
+    #[serde(default)]
+    pub swap_players: bool,
 }
 
 pub enum ReplayError {

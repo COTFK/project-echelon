@@ -10,7 +10,8 @@ http:
     type: json
     data: |-
       {
-        "top_down_view": true
+        "top_down_view": false,
+        "swap_players": true
       }
   auth: inherit
 

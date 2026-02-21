@@ -42,6 +42,7 @@ pub async fn launch_edopro(
     frame_pipe_path: &str,
     audio_pipe_path: &str,
     stderr_log_path: &str,
+    swap_players: bool,
 ) -> anyhow::Result<Child> {
     let edopro_path = std::env::var("EDOPRO_PATH")?;
     let log_file = File::create(stderr_log_path)
@@ -61,6 +62,11 @@ pub async fn launch_edopro(
     command.args(["-i-want-to-be-admin", "-replay", replay_file_path, "-q"]);
     command.env("DISPLAY", DISPLAY_ID);
     command.env("PULSE_SERVER", PULSE_SERVER);
+    // Propagate the swap flag into the EDOPro process as an environment variable
+    if swap_players {
+        command.env("EDOPRO_REPLAY_SWAP", "1");
+    }
+
     let child = command
         .env("EDOPRO_FRAME_PIPE", frame_pipe_path)
         .env("EDOPRO_AUDIO_PIPE", audio_pipe_path)
