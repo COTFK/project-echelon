@@ -20,6 +20,24 @@ pub enum ReplayStatus {
     Queued,
 }
 
+/// Video encoding presets clients can request for each replay.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoPreset {
+    /// Prioritize smaller files (higher CRF, faster encoding).
+    FileSize,
+    /// Balanced quality vs performance (current default).
+    Balanced,
+    /// Higher quality encoding (lower CRF, slower preset).
+    Quality,
+}
+
+impl Default for VideoPreset {
+    fn default() -> Self {
+        VideoPreset::Balanced
+    }
+}
+
 fn deserialize_game_speed<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
@@ -50,6 +68,9 @@ pub struct ReplayConfig {
     /// Values >1.0 speed up gameplay; values <1.0 slow it down. Defaults to 1.0.
     #[serde(deserialize_with = "deserialize_game_speed")]
     pub game_speed: f64,
+    /// Requested video-quality preset for ffmpeg encoding.
+    #[serde(default)]
+    pub video_preset: VideoPreset,
 }
 
 pub enum ReplayError {
