@@ -40,15 +40,6 @@ RUN . ./env.sh && travis/dependencies.sh
 RUN . ./env.sh && travis/install-premake5.sh
 RUN . ./env.sh && travis/build.sh
 
-# RUN apt-get update && apt-get install -y \
-#     git build-essential cmake pkg-config \
-#     libsfml-dev liblua5.3-dev sqlite3 libsqlite3-dev \
-#     && rm -rf /var/lib/apt/lists/*
-
-# WORKDIR /build
-# RUN git clone https://github.com/ProjectIgnis/EDOPro.git .
-# RUN cmake -B build && cmake --build build --config Release
-
 ##### Create server image
 
 FROM debian:trixie-slim AS runtime
