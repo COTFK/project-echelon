@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 mod api;
-use api::{ReplayStatus, download_video, get_replay_status, get_server_url, upload_file, validate_server_url};
+use api::{ReplayStatus, create_replay, download_video, get_replay_status, get_server_url, upload_replay, validate_server_url};
 
 type Http = Arc<serenity::http::Http>;
 
@@ -134,55 +134,71 @@ impl Handler {
         match attachment.download().await {
             Ok(data) => {
                 let server_url = get_server_url();
-                let upload_url = format!("{}/upload", server_url);
 
-                match upload_file(&upload_url, &data).await {
-                    Ok(id) => {
-                        if let Err(e) = command
-                            .edit_response(
-                                &ctx.http,
-                                serenity::builder::EditInteractionResponse::new()
-                                    .content("📋 Replay queued!"),
-                            )
-                            .await
-                        {
-                            error!("Failed to edit command response: {e}");
-                            return;
-                        }
+                // Step 1: Create a replay job with default config
+                match create_replay(server_url).await {
+                    Ok(task_id) => {
+                        // Step 2: Upload the replay file
+                        match upload_replay(server_url, &task_id, &data).await {
+                            Ok(()) => {
+                                if let Err(e) = command
+                                    .edit_response(
+                                        &ctx.http,
+                                        serenity::builder::EditInteractionResponse::new()
+                                            .content("📋 Replay queued!"),
+                                    )
+                                    .await
+                                {
+                                    error!("Failed to edit command response: {e}");
+                                    return;
+                                }
 
-                        match command.get_response(&ctx.http).await {
-                            Ok(status_msg) => {
-                                let channel_id = command.channel_id;
-                                let http = ctx.http.clone();
-                                let requester_id = command.user.id;
+                                match command.get_response(&ctx.http).await {
+                                    Ok(status_msg) => {
+                                        let channel_id = command.channel_id;
+                                        let http = ctx.http.clone();
+                                        let requester_id = command.user.id;
 
-                                tokio::spawn(monitor_replay(
-                                    server_url,
-                                    id,
-                                    channel_id,
-                                    status_msg.id,
-                                    requester_id,
-                                    http,
-                                ));
+                                        tokio::spawn(monitor_replay(
+                                            server_url,
+                                            task_id,
+                                            channel_id,
+                                            status_msg.id,
+                                            requester_id,
+                                            http,
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to get response message: {e}");
+                                        Self::respond_with_error(
+                                            ctx,
+                                            command,
+                                            &format!("[`{task_id}`] ⚠️ Replay was queued but we couldn't start monitoring. Check back later or try again."),
+                                        ).await;
+                                    }
+                                }
                             }
                             Err(e) => {
-                                error!("Failed to get response message: {e}");
-                                Self::respond_with_error(
-                                    ctx,
-                                    command,
-                                    &format!("[`{id}`] ⚠️ Replay was queued but we couldn't start monitoring. Check back later or try again."),
-                                ).await;
+                                error!("Failed to upload replay: {e}");
+                                let error_msg = if e.contains("500") {
+                                    "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
+                                } else if e.contains("Request failed") {
+                                    "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
+                                } else {
+                                    "❌ Upload failed. Please try again."
+                                };
+                                Self::respond_with_error(ctx, command, error_msg).await;
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to upload replay: {e}");
+                        error!("Failed to create replay job: {e}");
                         let error_msg = if e.contains("500") {
                             "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
                         } else if e.contains("Request failed") {
                             "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
                         } else {
-                            "❌ Upload failed. Please try again."
+                            "❌ Failed to create replay job. Please try again."
                         };
                         Self::respond_with_error(ctx, command, error_msg).await;
                     }
