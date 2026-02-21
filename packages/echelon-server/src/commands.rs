@@ -1,5 +1,6 @@
 //! Functions to spawn outside processes - EDOPro, Xvfb and ffmpeg.
 
+use crate::types::VideoPreset;
 use nix::sys::stat::Mode;
 use nix::unistd::mkfifo;
 use std::fs::File;
@@ -81,7 +82,10 @@ pub async fn launch_edopro(
         .env("EDOPRO_OFFLINE_RENDER", "1")
         .env("EDOPRO_FRAME_CROP_X", SIDEBAR_OFFSET.to_string())
         .env("EDOPRO_FRAME_CROP_Y", "0")
-        .env("EDOPRO_FRAME_CROP_W", (SCREEN_WIDTH - SIDEBAR_OFFSET).to_string())
+        .env(
+            "EDOPRO_FRAME_CROP_W",
+            (SCREEN_WIDTH - SIDEBAR_OFFSET).to_string(),
+        )
         .env("EDOPRO_FRAME_CROP_H", SCREEN_HEIGHT.to_string())
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err))
@@ -93,7 +97,11 @@ pub async fn launch_edopro(
 
 /// Start recording the display using ffmpeg (video only).
 /// Audio is captured concurrently via [`capture_audio_pipe`] and muxed in afterwards.
-pub async fn record_display(output_file: &str, frame_pipe_path: &str) -> anyhow::Result<Child> {
+pub async fn record_display(
+    output_file: &str,
+    frame_pipe_path: &str,
+    video_preset: VideoPreset,
+) -> anyhow::Result<Child> {
     let recording_width = SCREEN_WIDTH - SIDEBAR_OFFSET;
     let video_size = format!("{}x{}", recording_width, SCREEN_HEIGHT);
     tracing::debug!(
@@ -103,6 +111,12 @@ pub async fn record_display(output_file: &str, frame_pipe_path: &str) -> anyhow:
         frame_pipe_path,
         output_file
     );
+
+    let crf_value = match video_preset {
+        VideoPreset::FileSize => "27",
+        VideoPreset::Balanced => "24",
+        VideoPreset::Quality => "18",
+    };
 
     let child = TokioCommand::new("ffmpeg")
         .args([
@@ -121,7 +135,9 @@ pub async fn record_display(output_file: &str, frame_pipe_path: &str) -> anyhow:
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "veryslow",
+            "-crf",
+            crf_value,
             "-pix_fmt",
             "yuv420p",
             "-y",
@@ -156,7 +172,10 @@ pub async fn capture_audio_pipe(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to open audio pipe for reading: {e}"))?;
 
-    tracing::debug!("[{}] Audio pipe opened — EDOPro connected. Capturing...", job_id);
+    tracing::debug!(
+        "[{}] Audio pipe opened — EDOPro connected. Capturing...",
+        job_id
+    );
 
     let mut out = tokio::fs::File::create(&raw_audio_path)
         .await
@@ -174,7 +193,9 @@ pub async fn capture_audio_pipe(
     let approx_secs = total_bytes as f64 / (44100.0 * 4.0);
     tracing::debug!(
         "[{}] Audio capture done. {} bytes (~{:.2}s of audio).",
-        job_id, total_bytes, approx_secs
+        job_id,
+        total_bytes,
+        approx_secs
     );
 
     Ok(())

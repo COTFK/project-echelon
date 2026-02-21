@@ -15,6 +15,39 @@ pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
     None => "http://localhost:3000",
 };
 
+/// Video encoding presets that can be requested when uploading a replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoPreset {
+    FileSize,
+    Balanced,
+    Quality,
+}
+
+impl VideoPreset {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VideoPreset::FileSize => "file_size",
+            VideoPreset::Balanced => "balanced",
+            VideoPreset::Quality => "quality",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "file_size" => VideoPreset::FileSize,
+            "quality" => VideoPreset::Quality,
+            _ => VideoPreset::Balanced,
+        }
+    }
+}
+
+impl Default for VideoPreset {
+    fn default() -> Self {
+        VideoPreset::Balanced
+    }
+}
+
 /// Replay configuration sent to the server.
 #[derive(Clone, Debug, Serialize)]
 pub struct ReplayConfig {
@@ -24,6 +57,8 @@ pub struct ReplayConfig {
     pub swap_players: bool,
     /// Game speed multiplier (0.1x to 10.0x).
     pub game_speed: f64,
+    /// Requested video encoding preset.
+    pub video_preset: VideoPreset,
 }
 
 impl Default for ReplayConfig {
@@ -32,7 +67,32 @@ impl Default for ReplayConfig {
             top_down_view: false,
             swap_players: false,
             game_speed: 1.0,
+            video_preset: VideoPreset::Balanced,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ReplayConfig, VideoPreset};
+
+    #[test]
+    fn replay_config_default_uses_balanced_preset() {
+        assert_eq!(ReplayConfig::default().video_preset, VideoPreset::Balanced);
+    }
+
+    #[test]
+    fn video_preset_serialization_strings_are_stable() {
+        assert_eq!(VideoPreset::FileSize.as_str(), "file_size");
+        assert_eq!(VideoPreset::Balanced.as_str(), "balanced");
+        assert_eq!(VideoPreset::Quality.as_str(), "quality");
+    }
+
+    #[test]
+    fn video_preset_from_str_handles_unknown_and_known_values() {
+        assert_eq!(VideoPreset::from_str("file_size"), VideoPreset::FileSize);
+        assert_eq!(VideoPreset::from_str("quality"), VideoPreset::Quality);
+        assert_eq!(VideoPreset::from_str("banana"), VideoPreset::Balanced);
     }
 }
 

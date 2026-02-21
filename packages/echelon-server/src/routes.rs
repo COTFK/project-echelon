@@ -5,9 +5,9 @@
 //! [`download()`] grabs the finished video from the app state and sends it to the caller.
 
 use crate::types::Replay;
+use crate::types::ReplayConfig;
 use crate::types::ReplayError;
 use crate::types::ReplayStatus;
-use crate::types::ReplayConfig;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::Path;
@@ -183,7 +183,12 @@ pub async fn status(
                 let recording_estimate = lock
                     .values()
                     .find(|job| job.status == ReplayStatus::Recording)
-                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed))
+                    .map(|job| {
+                        estimate_minutes_from_seconds(
+                            job.estimated_duration.unwrap_or(0.0),
+                            job.config.game_speed,
+                        )
+                    })
                     .unwrap_or(0);
 
                 if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
@@ -193,7 +198,10 @@ pub async fn status(
                             .iter()
                             .take(position + 1)
                             .map(|(_, job)| {
-                                estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed)
+                                estimate_minutes_from_seconds(
+                                    job.estimated_duration.unwrap_or(0.0),
+                                    job.config.game_speed,
+                                )
                             })
                             .sum::<u32>();
 
@@ -216,8 +224,10 @@ pub async fn status(
                 }
             }
             ReplayStatus::Recording => {
-                let estimate_minutes =
-                    estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed);
+                let estimate_minutes = estimate_minutes_from_seconds(
+                    job.estimated_duration.unwrap_or(0.0),
+                    job.config.game_speed,
+                );
 
                 (
                     StatusCode::OK,
@@ -247,7 +257,7 @@ pub async fn status(
 
 pub async fn create_replay(
     State(jobs): State<Arc<RwLock<BTreeMap<Ulid, Replay>>>>,
-    Json(body): Json<ReplayConfig>
+    Json(body): Json<ReplayConfig>,
 ) -> impl IntoResponse {
     let id = Ulid::new();
 
