@@ -26,11 +26,12 @@ use ulid::Ulid;
 /// Maximum number of jobs allowed in the queue.
 const MAX_QUEUE_SIZE: usize = 100;
 
-fn estimate_minutes_from_seconds(seconds: f64) -> u32 {
+fn estimate_minutes_from_seconds(seconds: f64, game_speed: f64) -> u32 {
     if seconds <= 0.0 {
         0
     } else {
-        (seconds / 60.0).ceil().max(1.0) as u32
+        let adjusted_seconds = seconds / game_speed;
+        (adjusted_seconds / 60.0).ceil().max(1.0) as u32
     }
 }
 
@@ -182,7 +183,7 @@ pub async fn status(
                 let recording_estimate = lock
                     .values()
                     .find(|job| job.status == ReplayStatus::Recording)
-                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0)))
+                    .map(|job| estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed))
                     .unwrap_or(0);
 
                 if let Some(position) = queued_jobs.iter().position(|(job_id, _)| **job_id == id) {
@@ -192,7 +193,7 @@ pub async fn status(
                             .iter()
                             .take(position + 1)
                             .map(|(_, job)| {
-                                estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0))
+                                estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed)
                             })
                             .sum::<u32>();
 
@@ -216,7 +217,7 @@ pub async fn status(
             }
             ReplayStatus::Recording => {
                 let estimate_minutes =
-                    estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0));
+                    estimate_minutes_from_seconds(job.estimated_duration.unwrap_or(0.0), job.config.game_speed);
 
                 (
                     StatusCode::OK,
