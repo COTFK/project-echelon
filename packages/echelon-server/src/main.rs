@@ -233,7 +233,7 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
     let rate_limit_config = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(60)
-            .burst_size(6)
+            .burst_size(10)
             .use_headers()
             .key_extractor(RealIpKeyExtractor)
             .finish()
@@ -250,7 +250,6 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
     let upload_router = Router::new()
         .route("/upload", post(upload))
         .route("/create", post(create_replay))
-        .route("/download/{id}", get(download))
         .layer(GovernorLayer::new(rate_limit_config))
         .layer(middleware::from_fn(log_rate_limit_middleware));
 
@@ -259,6 +258,7 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
         .merge(upload_router)
         .route("/health", get(health))
         .route("/status/{id}", get(status))
+        .route("/download/{id}", get(download))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10 MB limit
         .layer(cors)
         .with_state(state)
