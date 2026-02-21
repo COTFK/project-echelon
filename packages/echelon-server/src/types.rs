@@ -24,7 +24,7 @@ fn deserialize_game_speed<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
 {
-    const MIN_GAME_SPEED: f64 = 0.1;
+    const MIN_GAME_SPEED: f64 = 0.5;
     const MAX_GAME_SPEED: f64 = 10.0;
 
     let value = f64::deserialize(deserializer)?;
