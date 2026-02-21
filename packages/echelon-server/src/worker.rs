@@ -2,16 +2,16 @@
 
 use crate::commands::capture_audio_pipe;
 use crate::commands::create_named_pipe;
+use crate::commands::get_video_duration_secs;
 use crate::commands::launch_edopro;
 use crate::commands::mux_audio_into_video;
 use crate::commands::record_display;
-use crate::commands::get_video_duration_secs;
 use crate::types::Replay;
 use crate::types::ReplayStatus;
-use axum::body::Bytes;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd;
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tempfile::tempdir;
@@ -98,13 +98,18 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
 
     let temp_replay_path = format!("{id}.yrpX");
     let replay_file_path = tmp_dir.path().join(temp_replay_path);
-    let replay_data = state
-        .write()
-        .await
+
+    // Get replay details
+    let mut lock = state.write().await;
+    let job = lock
         .get_mut(&id)
-        .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?
+        .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?;
+    let replay_data = job
         .data
-        .clone();
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("No replay data found in job? This should not happen."))?;
+    let replay_config = job.config.clone();
+    drop(lock);
 
     // Write replay_file to a temporary file
     let replay_size = replay_data.len();
@@ -117,6 +122,30 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         replay_size,
         replay_file_path
     );
+
+    // Refresh config
+    let edopro_path = std::env::var("EDOPRO_PATH")?;
+    let config_dir = Path::new(&edopro_path).join("config");
+    let backup_path = config_dir.join("system.conf.bak");
+    let config_path = config_dir.join("system.conf");
+    let _ = tokio::fs::copy(backup_path, config_path.clone()).await;
+
+    // Update config with settings
+    let config_content = tokio::fs::read_to_string(&config_path)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read config file: {e}"))?;
+
+    // Set top-down view
+    let updated_content = if replay_config.top_down_view {
+        config_content.replace("topdown_view = 0", "topdown_view = 1")
+    } else {
+        config_content.replace("topdown_view = 1", "topdown_view = 0")
+    };
+
+    tokio::fs::write(&config_path, updated_content)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to write config file: {e}"))?;
+    tracing::debug!("[{}] Updated config: topdown_view = 1", id);
 
     // Prepare and launch EDOPro
     tracing::info!("[{}] Launching EDOPro in replay mode...", id);
@@ -170,10 +199,16 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     let edopro_log_str = edopro_log_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid EDOPro log file path"))?;
-    let mut edopro_process =
-        launch_edopro(replay_path_str, frame_pipe_str, audio_pipe_str, edopro_log_str)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
+    let mut edopro_process = launch_edopro(
+        replay_path_str,
+        frame_pipe_str,
+        audio_pipe_str,
+        edopro_log_str,
+        replay_config.swap_players,
+        replay_config.game_speed,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to launch EDOPro: {e}"))?;
 
     // Wait for EDOPro to exit
     let edopro_exit_status = edopro_process
@@ -182,7 +217,10 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .map_err(|e| anyhow::anyhow!("Failed to wait for EDOPro process: {e}"))?;
 
     // Wait for ffmpeg to finish after EDOPro closes the frame pipe
-    tracing::info!("[{}] Replay finished. Waiting for ffmpeg to finalize...", id);
+    tracing::info!(
+        "[{}] Replay finished. Waiting for ffmpeg to finalize...",
+        id
+    );
     // Give ffmpeg enough time to properly finalize the MP4 file (critical for -movflags faststart)
     const FFMPEG_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
     let ffmpeg_wait = tokio::time::timeout(FFMPEG_SHUTDOWN_TIMEOUT, ffmpeg_child.wait()).await;
@@ -194,7 +232,11 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
             return Err(anyhow::anyhow!("Failed to wait for ffmpeg: {e}"));
         }
         Err(_) => {
-            tracing::error!("[{}] ffmpeg did not finish within {}s", id, FFMPEG_SHUTDOWN_TIMEOUT.as_secs());
+            tracing::error!(
+                "[{}] ffmpeg did not finish within {}s",
+                id,
+                FFMPEG_SHUTDOWN_TIMEOUT.as_secs()
+            );
             if let Some(pid) = ffmpeg_child.id() {
                 _ = kill(unistd::Pid::from_raw(pid.cast_signed()), Signal::SIGTERM);
             }
@@ -245,7 +287,7 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
         .get_mut(&id)
         .ok_or_else(|| anyhow::anyhow!("Job was removed from queue unexpectedly"))?;
     job.video = Some(video_data.into());
-    job.data = Bytes::new(); // Clear replay data - no longer needed
+    job.data = None; // Clear replay data - no longer needed
     job.status = ReplayStatus::Done;
 
     let done_ms = SystemTime::now()
@@ -255,9 +297,13 @@ async fn process_job(state: &Arc<RwLock<BTreeMap<Ulid, Replay>>>, id: Ulid) -> a
     let elapsed_secs = done_ms.saturating_sub(start_ms) as f64 / 1000.0;
     let video_secs = get_video_duration_secs(output_path_str)
         .await
-        .unwrap_or(job.estimated_duration);
+        .unwrap_or(job.estimated_duration.unwrap_or(0.0));
     let overhead_secs = elapsed_secs - video_secs;
-    let ratio = if video_secs > 0.0 { elapsed_secs / video_secs } else { 0.0 };
+    let ratio = if video_secs > 0.0 {
+        elapsed_secs / video_secs
+    } else {
+        0.0
+    };
     tracing::info!(
         "[{}] Processing time {:.2}s vs video {:.2}s: overhead {:.2}s, ratio {:.2}x",
         id,

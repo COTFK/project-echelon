@@ -4,6 +4,7 @@ mod routes;
 mod types;
 mod worker;
 
+use crate::routes::create_replay;
 use crate::routes::download;
 use crate::routes::status;
 use crate::routes::upload;
@@ -13,7 +14,7 @@ use crate::worker::worker;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
-use axum::http::{Method, Request, Response, StatusCode};
+use axum::http::{Method, Request, Response, StatusCode, header::CONTENT_TYPE};
 use axum::middleware::{self, Next};
 use axum::routing::get;
 use axum::routing::post;
@@ -46,7 +47,9 @@ async fn main() {
 
     // Start PulseAudio with a null sink - provides a virtual audio device for EDOPro
     let Ok(pulseaudio_process) = start_pulseaudio().await else {
-        tracing::error!("Unable to start PulseAudio - check that you have it installed on your system.");
+        tracing::error!(
+            "Unable to start PulseAudio - check that you have it installed on your system."
+        );
         return;
     };
 
@@ -119,20 +122,17 @@ async fn close_gracefully(
 }
 
 /// Middleware to log rate limit hits (429 responses)
-async fn log_rate_limit_middleware(
-    req: Request<Body>,
-    next: Next,
-) -> Response<Body> {
+async fn log_rate_limit_middleware(req: Request<Body>, next: Next) -> Response<Body> {
     // Extract client IP before processing
     let client_ip = extract_client_ip(&req);
-    
+
     let response = next.run(req).await;
-    
+
     // Log if rate limit was hit
     if response.status() == StatusCode::TOO_MANY_REQUESTS {
         tracing::warn!("Rate limit exceeded for IP: {}", client_ip);
     }
-    
+
     response
 }
 
@@ -147,7 +147,7 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             }
         }
     }
-    
+
     // Try X-Real-IP header as fallback
     if let Some(real_ip) = req.headers().get("x-real-ip") {
         if let Ok(value) = real_ip.to_str() {
@@ -157,12 +157,12 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             }
         }
     }
-    
+
     // Use peer address from connection info
     if let Some(addr) = req.extensions().get::<SocketAddr>() {
         return addr.ip().to_string();
     }
-    
+
     "unknown".to_string()
 }
 
@@ -174,14 +174,19 @@ struct RealIpKeyExtractor;
 impl KeyExtractor for RealIpKeyExtractor {
     type Key = String;
 
-    fn extract<T>(&self, req: &axum::http::Request<T>) -> Result<Self::Key, tower_governor::GovernorError> {
+    fn extract<T>(
+        &self,
+        req: &axum::http::Request<T>,
+    ) -> Result<Self::Key, tower_governor::GovernorError> {
         // Check for bot secret - if present and valid, use a special key that bypasses limiting
         if let Ok(expected_secret) = std::env::var("BOT_SECRET") {
             if !expected_secret.is_empty() {
                 if let Some(bot_secret) = req.headers().get("x-bot-secret") {
                     if let Ok(value) = bot_secret.to_str() {
                         if value == expected_secret {
-                            tracing::info!("Received request from Discord bot - exempting from rate limit.");
+                            tracing::info!(
+                                "Received request from Discord bot - exempting from rate limit."
+                            );
                             // Return a unique key per bot request to effectively bypass rate limiting
                             // (each request gets its own bucket with full capacity)
                             return Ok(format!("bot:{}", Ulid::new()));
@@ -232,7 +237,7 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
     let rate_limit_config = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(60)
-            .burst_size(6)
+            .burst_size(10)
             .use_headers()
             .key_extractor(RealIpKeyExtractor)
             .finish()
@@ -242,12 +247,14 @@ fn create_app(state: Arc<RwLock<BTreeMap<Ulid, Replay>>>) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE])
         // allow requests from any origin
         .allow_origin(Any);
 
     // Rate-limited upload route (nested router so rate limit only applies here)
     let upload_router = Router::new()
         .route("/upload", post(upload))
+        .route("/create", post(create_replay))
         .layer(GovernorLayer::new(rate_limit_config))
         .layer(middleware::from_fn(log_rate_limit_middleware));
 

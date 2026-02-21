@@ -10,7 +10,7 @@ use crate::api::{ApiClient, validate_replay_file};
 use crate::components::Hero;
 use crate::components::status_display::{LoadingSpinner, StatusDisplay};
 use crate::components::video_preview::VideoPreview;
-use crate::types::{REPLAY_EXTENSION, ReplayError, ReplayStatus};
+use crate::types::{ReplayConfig, REPLAY_EXTENSION, ReplayError, ReplayStatus};
 
 /// Main upload form component.
 #[component]
@@ -20,6 +20,12 @@ pub fn UploadForm() -> Element {
     let api_client = use_hook(ApiClient::default);
     let mut show_hero = use_signal(|| true);
     let mut video_url = use_signal(String::new);
+
+    // Advanced config options
+    let mut top_down_view = use_signal(|| false);
+    let mut swap_players = use_signal(|| false);
+    let mut game_speed = use_signal(|| 1.0);
+    let mut show_advanced = use_signal(|| false);
 
     // Poll status while processing
     use_interval(Duration::from_secs(1), {
@@ -79,11 +85,31 @@ pub fn UploadForm() -> Element {
 
                 status.set(ReplayStatus::Uploading);
 
-                match api_client.upload_replay(data.to_vec()).await {
+                // Step 1: Create the replay job with config
+                let config = ReplayConfig {
+                    top_down_view: top_down_view(),
+                    swap_players: swap_players(),
+                    game_speed: game_speed(),
+                };
+
+                let task_id = match api_client.create_replay(&config).await {
                     Ok(id) => {
-                        tracing::info!("Upload successful, replay ID: {id}");
-                        replay_id.set(id.clone());
-                        match api_client.get_status(&id).await {
+                        tracing::info!("Replay created with ID: {id}");
+                        id
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create replay: {e}");
+                        status.set(ReplayStatus::Error(e));
+                        return;
+                    }
+                };
+
+                // Step 2: Upload the replay file
+                match api_client.upload_replay(&task_id, data.to_vec()).await {
+                    Ok(_) => {
+                        tracing::info!("Upload successful, replay ID: {task_id}");
+                        replay_id.set(task_id.clone());
+                        match api_client.get_status(&task_id).await {
                             Ok(initial_status) => status.set(initial_status),
                             Err(e) => status.set(ReplayStatus::Error(e)),
                         }
@@ -120,6 +146,64 @@ pub fn UploadForm() -> Element {
                             }
                             label { class: "label pt-2", "*{REPLAY_EXTENSION} file, max size 10MB" }
                         }
+
+                        // Advanced settings dropdown
+                        div {
+                            class: "collapse collapse-arrow bg-base-100 bg-opacity-50 ",
+                            input {
+                                r#type: "checkbox",
+                                onchange: move |evt| show_advanced.set(evt.checked()),
+                            }
+                            div { class: "collapse-title text-sm font-medium",
+                                "Advanced Settings (Optional)"
+                            }
+                            div {
+                                class: "collapse-content flex flex-col gap-3",
+                                // Top-down view checkbox
+                                label {
+                                    class: "label cursor-pointer gap-2",
+                                    input {
+                                        class: "checkbox checkbox-sm",
+                                        r#type: "checkbox",
+                                        onchange: move |evt| top_down_view.set(evt.checked()),
+                                    }
+                                    span { class: "label-text text-sm", "Top-down view" }
+                                }
+
+                                // Swap players checkbox
+                                label {
+                                    class: "label cursor-pointer gap-2",
+                                    input {
+                                        class: "checkbox checkbox-sm",
+                                        r#type: "checkbox",
+                                        onchange: move |evt| swap_players.set(evt.checked()),
+                                    }
+                                    span { class: "label-text text-sm", "Swap players" }
+                                }
+
+                                // Game speed dropdown
+                                label {
+                                    class: "label",
+                                    span { class: "label-text text-sm", "Game Speed" }
+                                }
+                                select {
+                                    class: "select select-bordered select-sm w-full",
+                                    onchange: move |evt| {
+                                        if let Ok(val) = evt.value().parse::<f64>() {
+                                            game_speed.set(val);
+                                        }
+                                    },
+                                    option { value: "0.5", "Slowest (0.5x)" }
+                                    option { value: "0.75", "Slow (0.75x)" }
+                                    option { value: "1.0", selected: true, "Normal (1x)" }
+                                    option { value: "1.5", "Fast (1.5x)" }
+                                    option { value: "2.0", "Faster (2x)" }
+                                    option { value: "3.0", "Very Fast (3x)" }
+                                    option { value: "10.0", "Timelapse (10x)" }
+                                }
+                            }
+                        }
+
                         button { class: "btn btn-primary", r#type: "submit", "Convert" }
                         p { class: "text-xs text-center opacity-60 mt-2",
                             "By uploading, you agree to our "
@@ -144,14 +228,26 @@ pub fn UploadForm() -> Element {
                         }
                         button {
                             class: "btn btn-primary",
-                            onclick: move |_| status.set(ReplayStatus::Idle),
+                            onclick: move |_| {
+                                status.set(ReplayStatus::Idle);
+                                top_down_view.set(false);
+                                swap_players.set(false);
+                                game_speed.set(1.0);
+                                show_advanced.set(false);
+                            },
                             "Try again"
                         }
                     } else if matches!(status(), ReplayStatus::Completed(_)) {
                         legend { class: "fieldset-legend text-base", "Done!" }
                         button {
                             class: "btn btn-primary",
-                            onclick: move |_| status.set(ReplayStatus::Idle),
+                            onclick: move |_| {
+                                status.set(ReplayStatus::Idle);
+                                top_down_view.set(false);
+                                swap_players.set(false);
+                                game_speed.set(1.0);
+                                show_advanced.set(false);
+                            },
                             "Convert another video"
                         }
                     } else {

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::OnceLock;
 use std::time::Duration;
+use serde_json::json;
 
 /// Cached server URL, initialized once on first access.
 static SERVER_URL: OnceLock<String> = OnceLock::new();
@@ -42,13 +43,55 @@ fn create_http_client() -> HttpClient {
         .expect("Failed to build HTTP client")
 }
 
-/// Uploads a replay file to the echelon server.
+/// Creates a replay job with default configuration (no customization for Discord bot).
 /// Returns the unique ID assigned to the replay.
-pub async fn upload_file(url: &str, data: &[u8]) -> Result<String, String> {
+pub async fn create_replay(server_url: &str) -> Result<String, String> {
     let client = create_http_client();
+    let create_url = format!("{}/create", server_url);
+
+    let mut request = client.post(&create_url).header("Content-Type", "application/json");
+
+    // Add bot secret token if configured (to bypass rate limiting)
+    if let Ok(bot_secret) = env::var("BOT_SECRET") {
+        if !bot_secret.is_empty() {
+            request = request.header("X-Bot-Secret", bot_secret);
+        }
+    }
+
+    // Use default configuration
+    let body = json!({
+        "top_down_view": false,
+        "swap_players": false,
+        "game_speed": 1.0
+    });
+
+    let response = request
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Server returned {}", response.status()));
+    }
+
+    let id = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {e}"))?
+        .trim()
+        .to_string();
+
+    Ok(id)
+}
+
+/// Uploads a replay file to the echelon server for a given task ID.
+pub async fn upload_replay(server_url: &str, task_id: &str, data: &[u8]) -> Result<(), String> {
+    let client = create_http_client();
+    let upload_url = format!("{}/upload?task_id={}", server_url, task_id);
 
     let mut request = client
-        .post(url)
+        .post(&upload_url)
         .header("Content-Type", "application/octet-stream");
 
     // Add bot secret token if configured (to bypass rate limiting)
@@ -68,14 +111,7 @@ pub async fn upload_file(url: &str, data: &[u8]) -> Result<String, String> {
         return Err(format!("Server returned {}", response.status()));
     }
 
-    let id = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {e}"))?
-        .trim()
-        .to_string();
-
-    Ok(id)
+    Ok(())
 }
 
 /// Fetches the current status of a replay from the server.

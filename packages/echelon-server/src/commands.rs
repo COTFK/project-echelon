@@ -42,6 +42,8 @@ pub async fn launch_edopro(
     frame_pipe_path: &str,
     audio_pipe_path: &str,
     stderr_log_path: &str,
+    swap_players: bool,
+    game_speed: f64,
 ) -> anyhow::Result<Child> {
     let edopro_path = std::env::var("EDOPRO_PATH")?;
     let log_file = File::create(stderr_log_path)
@@ -57,10 +59,22 @@ pub async fn launch_edopro(
         DISPLAY_ID
     );
 
-    let mut command = TokioCommand::new(edopro_path);
+    let mut command = TokioCommand::new(Path::new(&edopro_path).join("EDOPro"));
     command.args(["-i-want-to-be-admin", "-replay", replay_file_path, "-q"]);
     command.env("DISPLAY", DISPLAY_ID);
     command.env("PULSE_SERVER", PULSE_SERVER);
+    // Propagate the swap flag into the EDOPro process as an environment variable
+    if swap_players {
+        command.env("EDOPRO_REPLAY_SWAP", "1");
+    }
+
+    // Propagate the requested gameplay speed into the EDOPro process so
+    // offline rendering can scale simulated time while keeping rendering at 60fps.
+    // Only set if it's a positive finite value.
+    if game_speed.is_finite() && game_speed > 0.0 {
+        command.env("EDOPRO_GAME_SPEED", game_speed.to_string());
+    }
+
     let child = command
         .env("EDOPRO_FRAME_PIPE", frame_pipe_path)
         .env("EDOPRO_AUDIO_PIPE", audio_pipe_path)
@@ -73,7 +87,7 @@ pub async fn launch_edopro(
         .stderr(Stdio::from(log_file_err))
         .spawn()?;
 
-    tracing::debug!("EDOPro process started with PID: {:?}", child.id());
+    tracing::debug!("EDOPro process has started with PID: {:?}", child.id());
     Ok(child)
 }
 

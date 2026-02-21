@@ -1,0 +1,25 @@
+info:
+  name: Upload
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://localhost:3000/upload?task_id={{task_id}}
+  params:
+    - name: task_id
+      value: "{{task_id}}"
+      type: query
+  body:
+    type: file
+    data:
+      - filePath: /home/arqalite/Downloads/ponx.yrpX
+        contentType: ""
+        selected: true
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

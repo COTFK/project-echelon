@@ -1,4 +1,4 @@
-use echelon_discord::api::{ReplayStatus, download_video, get_replay_status, upload_file};
+use echelon_discord::api::{ReplayStatus, create_replay, download_video, get_replay_status, upload_replay};
 
 #[test]
 fn test_replay_status_parsing_queued() {
@@ -58,36 +58,66 @@ fn test_replay_status_parsing_not_found() {
 }
 
 #[tokio::test]
-async fn test_upload_file_success() {
+async fn test_create_replay_success() {
     let mut server = mockito::Server::new_async().await;
 
-    let mock = server
-        .mock("POST", "/upload")
+    let _mock = server
+        .mock("POST", "/create")
         .with_status(200)
         .with_body("replay-id-123")
         .expect(1)
         .create();
 
-    let test_data = b"fake replay data";
-    let result = upload_file(&format!("{}/upload", server.url()), test_data).await;
+    let result = create_replay(&server.url()).await;
 
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "replay-id-123");
-    mock.assert();
 }
 
 #[tokio::test]
-async fn test_upload_file_server_error() {
+async fn test_create_replay_server_error() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
-        .mock("POST", "/upload")
+        .mock("POST", "/create")
+        .with_status(500)
+        .expect(1)
+        .create();
+
+    let result = create_replay(&server.url()).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("500"));
+}
+
+#[tokio::test]
+async fn test_upload_replay_success() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _mock = server
+        .mock("POST", mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()))
+        .with_status(200)
+        .expect(1)
+        .create();
+
+    let test_data = b"fake replay data";
+    let result = upload_replay(&server.url(), "test-task-id", test_data).await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_upload_replay_server_error() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _mock = server
+        .mock("POST", mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()))
         .with_status(500)
         .expect(1)
         .create();
 
     let test_data = b"fake replay data";
-    let result = upload_file(&format!("{}/upload", server.url()), test_data).await;
+    let result = upload_replay(&server.url(), "test-task-id", test_data).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("500"));
