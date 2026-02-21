@@ -10,7 +10,10 @@ use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 mod api;
-use api::{ReplayStatus, create_replay, download_video, get_replay_status, get_server_url, upload_replay, validate_server_url};
+use api::{
+    ReplayStatus, create_replay, download_video, get_replay_status, get_server_url, upload_replay,
+    validate_server_url,
+};
 
 type Http = Arc<serenity::http::Http>;
 
@@ -224,9 +227,7 @@ fn format_status(status: &ReplayStatus, animation_frame: Option<usize>) -> Strin
             position,
             estimate_minutes,
         } => {
-            format!(
-                "⏳ Queued at position {position} (ETA: {estimate_minutes} min.)"
-            )
+            format!("⏳ Queued at position {position} (ETA: {estimate_minutes} min.)")
         }
         ReplayStatus::Processing { estimate_minutes } => {
             let spinner = ['⠋', '⠙', '⠴', '⠦'][animation_frame.unwrap_or(0) % 4];

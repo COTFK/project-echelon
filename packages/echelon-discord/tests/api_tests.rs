@@ -1,4 +1,6 @@
-use echelon_discord::api::{ReplayStatus, create_replay, download_video, get_replay_status, upload_replay};
+use echelon_discord::api::{
+    ReplayStatus, create_replay, download_video, get_replay_status, upload_replay,
+};
 
 #[test]
 fn test_replay_status_parsing_queued() {
@@ -6,7 +8,10 @@ fn test_replay_status_parsing_queued() {
     let status: ReplayStatus = serde_json::from_str(json).unwrap();
 
     match status {
-        ReplayStatus::Queued { position, estimate_minutes: _ } => {
+        ReplayStatus::Queued {
+            position,
+            estimate_minutes: _,
+        } => {
             assert_eq!(position, 5);
         }
         _ => panic!("Expected Queued status"),
@@ -95,7 +100,10 @@ async fn test_upload_replay_success() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
-        .mock("POST", mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()))
+        .mock(
+            "POST",
+            mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()),
+        )
         .with_status(200)
         .expect(1)
         .create();
@@ -111,7 +119,10 @@ async fn test_upload_replay_server_error() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
-        .mock("POST", mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()))
+        .mock(
+            "POST",
+            mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()),
+        )
         .with_status(500)
         .expect(1)
         .create();

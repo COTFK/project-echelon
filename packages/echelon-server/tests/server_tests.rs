@@ -237,7 +237,11 @@ async fn test_queue_positions_are_sequential() {
     positions.sort();
     // Skip this assertion if worker has already started processing
     if !positions.is_empty() {
-        assert_eq!(positions, vec![1, 2, 3], "Positions should be 1, 2, 3 if still queued");
+        assert_eq!(
+            positions,
+            vec![1, 2, 3],
+            "Positions should be 1, 2, 3 if still queued"
+        );
     }
 }
 
@@ -314,7 +318,7 @@ async fn test_status_for_error_job() {
     let server = TestServer::new(app).unwrap();
 
     let response = server.get(&format!("/status/{id}")).await;
-    response.assert_status_ok();  // Status endpoint returns 200 even for failed jobs
+    response.assert_status_ok(); // Status endpoint returns 200 even for failed jobs
     let body = response.text();
     assert!(body.contains("\"status\":\"error\""));
     assert!(body.contains("Test error message"));
@@ -340,7 +344,7 @@ async fn test_status_for_error_job_without_message() {
     let server = TestServer::new(app).unwrap();
 
     let response = server.get(&format!("/status/{id}")).await;
-    response.assert_status_ok();  // Status endpoint returns 200 even for failed jobs
+    response.assert_status_ok(); // Status endpoint returns 200 even for failed jobs
     let body = response.text();
     assert!(body.contains("\"status\":\"error\""));
     assert!(body.contains("An error has occurred"));
@@ -450,7 +454,7 @@ async fn test_upload_exact_magic_bytes_only() {
 
     // Exactly 4 bytes - the magic number and nothing else - should be rejected as too small to parse
     let response = server.post("/upload").bytes(b"yrpX".to_vec().into()).await;
-    response.assert_status_bad_request();  // Now correctly rejected during parsing
+    response.assert_status_bad_request(); // Now correctly rejected during parsing
     let body = response.text();
     assert!(body.contains("Invalid replay file"));
 }
@@ -483,21 +487,30 @@ fn test_replay_is_replay_file_valid() {
 fn test_replay_is_replay_file_invalid() {
     // Invalid data should fail to create a Replay
     let result = Replay::new(b"notavalid".to_vec().into());
-    assert!(result.is_err(), "Should fail to create replay from invalid data");
+    assert!(
+        result.is_err(),
+        "Should fail to create replay from invalid data"
+    );
 }
 
 #[test]
 fn test_replay_is_replay_file_empty() {
     // Empty data should fail to create a Replay
     let result = Replay::new(Vec::new().into());
-    assert!(result.is_err(), "Should fail to create replay from empty data");
+    assert!(
+        result.is_err(),
+        "Should fail to create replay from empty data"
+    );
 }
 
 #[test]
 fn test_replay_is_replay_file_too_short() {
     // Too short data should fail to create a Replay
     let result = Replay::new(b"yrp".to_vec().into());
-    assert!(result.is_err(), "Should fail to create replay from too short data");
+    assert!(
+        result.is_err(),
+        "Should fail to create replay from too short data"
+    );
 }
 
 // =============================================================================
