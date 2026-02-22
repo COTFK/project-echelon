@@ -11,12 +11,12 @@ use dioxus::prelude::*;
 
 use pages::PrivacyPolicyPage;
 use pages::TermsOfServicePage;
-use pages::UploadPage;
+use pages::Home;
 
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {
     #[route("/")]
-    UploadPage,
+    Home,
 
     #[route("/privacy")]
     PrivacyPolicyPage,

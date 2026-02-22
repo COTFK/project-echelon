@@ -2,7 +2,7 @@ use crate::components::{Footer, NavBar, PrivacyPolicy, TermsOfService, UploadFor
 use dioxus::prelude::*;
 
 #[component]
-pub fn UploadPage() -> Element {
+pub fn Home() -> Element {
     rsx!(
         NavBar {}
         UploadForm {}
