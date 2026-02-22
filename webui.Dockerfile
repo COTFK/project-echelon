@@ -31,6 +31,10 @@ COPY packages/echelon-webui .
 ARG API_BASE_URL="https://echelon-server.arqalite.org"
 ENV API_BASE_URL=$API_BASE_URL
 
+# Discord invite URL - defaults to production, can be overridden
+ARG DISCORD_INVITE_URL="https://discord.com/oauth2/authorize?client_id=1452676046326595605"
+ENV DISCORD_INVITE_URL=$DISCORD_INVITE_URL
+
 # Build the web app
 RUN dx bundle --platform web --release --debug-symbols=false --out-dir bundle
 

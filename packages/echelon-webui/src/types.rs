@@ -15,6 +15,12 @@ pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
     None => "http://localhost:3000",
 };
 
+/// Discord bot invite URL
+pub const DISCORD_INVITE_URL: &str = match option_env!("DISCORD_INVITE_URL") {
+    Some(url) => url,
+    None => "#",
+};
+
 /// Video encoding presets that can be requested when uploading a replay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
