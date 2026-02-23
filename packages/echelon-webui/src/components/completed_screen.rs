@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 pub fn CompletedScreen(video_url: String, reset_form: EventHandler<MouseEvent>) -> Element {
     rsx!(
         fieldset {
-            class: "fieldset bg-base-200 border-base-300 rounded-box min-w-64 md:w-sm lg:w-md border pb-6 pt-4 px-6 flex flex-col gap-4",
+            class: "fieldset bg-base-200 border-base-300 rounded-box min-w-64 max-w-sm sm:max-w-xl border pb-4 px-4 flex flex-col gap-4",
             legend { class: "fieldset-legend text-base", "Done!" }
             video {
                 class: "w-full rounded-lg",
