@@ -1,6 +1,6 @@
 //! API client for communicating with the replay processing server.
 
-use crate::types::{API_BASE_URL, ReplayConfig, ReplayError, ReplayStatus, StatusResponse};
+use crate::types::{API_BASE_URL, ReplayConfig, ReplayError, ProcessingStatus, StatusResponse};
 
 /// API client for the replay server.
 #[derive(Clone)]
@@ -97,7 +97,7 @@ impl ApiClient {
     /// # Returns
     /// - `Ok(ReplayStatus)` with the current status
     /// - `Err(ReplayError)` on network or parse failure
-    pub async fn get_status(&self, replay_id: &str) -> Result<ReplayStatus, ReplayError> {
+    pub async fn get_status(&self, replay_id: &str) -> Result<ProcessingStatus, ReplayError> {
         let response = self
             .client
             .get(format!("{}/status/{}", self.base_url, replay_id))

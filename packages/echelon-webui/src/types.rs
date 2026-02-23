@@ -104,7 +104,7 @@ mod tests {
 
 /// Represents the current status of a replay processing job.
 #[derive(Clone, PartialEq, Debug, Default)]
-pub enum ReplayStatus {
+pub enum ProcessingStatus {
     /// No replay has been uploaded yet.
     #[default]
     Idle,
@@ -123,7 +123,7 @@ pub enum ReplayStatus {
     Error(ReplayError),
 }
 
-impl ReplayStatus {
+impl ProcessingStatus {
     /// Returns `true` if we should poll for status updates.
     #[inline]
     pub const fn should_poll(&self) -> bool {
@@ -174,23 +174,23 @@ pub struct StatusResponse {
 
 impl StatusResponse {
     /// Converts the API response to a [`ReplayStatus`].
-    pub fn into_replay_status(self, replay_id: &str) -> ReplayStatus {
+    pub fn into_replay_status(self, replay_id: &str) -> ProcessingStatus {
         match self.status.as_str() {
-            "queued" => ReplayStatus::Queued {
+            "queued" => ProcessingStatus::Queued {
                 position: self.position.unwrap_or(0),
                 estimate_minutes: self.estimate_minutes.unwrap_or(0),
             },
-            "processing" => ReplayStatus::Processing {
+            "processing" => ProcessingStatus::Processing {
                 estimate_minutes: self.estimate_minutes.unwrap_or(0),
             },
-            "done" => ReplayStatus::Completed(replay_id.to_owned()),
-            "error" => ReplayStatus::Error(ReplayError::Server(
+            "done" => ProcessingStatus::Completed(replay_id.to_owned()),
+            "error" => ProcessingStatus::Error(ReplayError::Server(
                 self.message.unwrap_or_else(|| "Unknown error".to_owned()),
             )),
-            "not_found" => ReplayStatus::Error(ReplayError::NotFound(
+            "not_found" => ProcessingStatus::Error(ReplayError::NotFound(
                 self.message.unwrap_or_else(|| "Job not found".to_owned()),
             )),
-            _ => ReplayStatus::Error(ReplayError::Server("Unknown status".to_owned())),
+            _ => ProcessingStatus::Error(ReplayError::Server("Unknown status".to_owned())),
         }
     }
 }

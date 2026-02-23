@@ -1,11 +1,11 @@
-use crate::components::{Footer, NavBar, PrivacyPolicy, TermsOfService, UploadForm};
+use crate::components::{Footer, NavBar, PrivacyPolicy, TermsOfService, ConverterFlow};
 use dioxus::prelude::*;
 
 #[component]
 pub fn Home() -> Element {
     rsx!(
         NavBar {}
-        UploadForm {}
+        ConverterFlow {}
         Footer {}
     )
 }
