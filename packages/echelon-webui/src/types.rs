@@ -18,7 +18,7 @@ pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
 /// Discord bot invite URL
 pub const DISCORD_INVITE_URL: &str = match option_env!("DISCORD_INVITE_URL") {
     Some(url) => url,
-    None => "#",
+    None => "https://discord.com/oauth2/authorize?client_id=1452676046326595605",
 };
 
 /// Video encoding presets that can be requested when uploading a replay.
