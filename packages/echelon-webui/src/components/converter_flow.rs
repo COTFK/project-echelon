@@ -139,7 +139,7 @@ pub fn ConverterFlow() -> Element {
 
     rsx!(
         div {
-            class: "flex flex-col lg:flex-row gap-4 items-center justify-evenly w-full flex-1 px-4 py-4",
+            class: "flex flex-col lg:flex-row gap-4 items-center justify-evenly w-full flex-1 px-4 py-4 h-full",
             match status() {
                 ProcessingStatus::Idle => rsx!(
                     if show_hero() {
