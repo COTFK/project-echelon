@@ -10,6 +10,7 @@ mod converter_flow;
 mod upload_form;
 mod completed_screen;
 mod error_screen;
+mod help;
 
 pub use footer::Footer;
 pub use hero::Hero;
@@ -21,3 +22,5 @@ pub use upload_form::UploadForm;
 pub use processing_screen::ProcessingScreen;
 pub use completed_screen::CompletedScreen;
 pub use error_screen::ErrorScreen;
+pub use help::WebsiteHelp;
+pub use help::DiscordBotHelp;

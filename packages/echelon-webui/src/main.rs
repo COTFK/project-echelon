@@ -9,9 +9,10 @@ mod types;
 
 use dioxus::prelude::*;
 
+use pages::HelpPage;
+use pages::Home;
 use pages::PrivacyPolicyPage;
 use pages::TermsOfServicePage;
-use pages::Home;
 
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {
@@ -23,6 +24,9 @@ enum Route {
 
     #[route("/terms")]
     TermsOfServicePage,
+
+    #[route("/help")]
+    HelpPage,
 }
 
 fn main() {
