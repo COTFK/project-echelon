@@ -134,4 +134,6 @@ We accept contributions! Submit your patches in the [Fire King Discord server](h
 
 Project Echelon is licensed under the [MIT license](LICENSE).
 
-Unless explicitly stated otherwise, any contribution to this project shall be licensed under MIT, without any additional terms or conditions.
+Project Ignis: EDOPro, and the custom fork in this repository, are licensed under [the AGPL-3.0 license](packages/echelon-edopro/LICENSE).
+
+Unless explicitly stated otherwise, any contribution to this project shall be licensed under the aforementioned licenses, without any additional terms or conditions.
