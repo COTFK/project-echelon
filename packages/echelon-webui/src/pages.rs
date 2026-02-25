@@ -6,34 +6,42 @@ use dioxus::prelude::*;
 #[component]
 pub fn Home() -> Element {
     rsx!(
-        NavBar {}
-        ConverterFlow {}
-        Footer {}
+        div { class: "flex flex-col min-h-screen",
+            NavBar {}
+            main { class: "flex-1", ConverterFlow {} }
+            Footer {}
+        }
     )
 }
 
 #[component]
 pub fn PrivacyPolicyPage() -> Element {
     rsx!(
-        NavBar {}
-        PrivacyPolicy {}
-        Footer {}
+        div { class: "flex flex-col min-h-screen",
+            NavBar {}
+            main { class: "flex-1", PrivacyPolicy {} }
+            Footer {}
+        }
     )
 }
 
 #[component]
 pub fn TermsOfServicePage() -> Element {
     rsx!(
-        NavBar {}
-        TermsOfService {}
-        Footer {}
+        div { class: "flex flex-col min-h-screen",
+            NavBar {}
+            main { class: "flex-1", TermsOfService {} }
+            Footer {}
+        }
     )
 }
 
 #[component]
 pub fn HelpPage() -> Element {
     rsx!(
+        div { class: "flex flex-col min-h-screen",
         NavBar {}
+        main { class: "flex-1",
         div { 
             class: "container mx-auto px-4 py-8 max-w-4xl prose prose-invert",
             h1 { class: "text-4xl font-bold", "Help" }
@@ -62,6 +70,8 @@ pub fn HelpPage() -> Element {
                 }
             }
         }
+        } // main
         Footer {}
+        } // flex wrapper
     )
 }
