@@ -24,7 +24,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY packages/echelon-server .
 
 # Build the application
-RUN cargo build --release
+RUN cargo build --release \
+    && strip target/release/echelon-server || true
 
 ##### Build EDOPro
 FROM gcc:15 AS edopro-builder
@@ -43,18 +44,21 @@ RUN . ./env.sh && travis/install-premake5.sh
 COPY packages/echelon-edopro/ /edopro/
 
 RUN . ./env.sh && travis/build.sh
+RUN strip /edopro/bin/x64/release/ygoprodll || true
 
 ##### Create server image
 
 FROM debian:trixie-slim AS runtime
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl xvfb ffmpeg pulseaudio \
     && rm -rf /var/lib/apt/lists/*
 
-ADD https://github.com/ProjectIgnis/edopro-assets/releases/download/41.0.2/ProjectIgnis-EDOPro-41.0.2-linux.tar.gz /usr/local/
-RUN tar -xzf /usr/local/ProjectIgnis-EDOPro-41.0.2-linux.tar.gz -C /usr/local/ && rm /usr/local/ProjectIgnis-EDOPro-41.0.2-linux.tar.gz
+RUN set -eux; \
+    curl -fsSL https://github.com/ProjectIgnis/edopro-assets/releases/download/41.0.2/ProjectIgnis-EDOPro-41.0.2-linux.tar.gz \
+      | tar -xz -C /usr/local/ --no-same-owner
 
+RUN rm -rf /usr/local/ProjectIgnis/pics/*
 COPY packages/echelon-server/deployment/config/* /usr/local/ProjectIgnis/config/
 COPY packages/echelon-server/deployment/textures/bg.png /usr/local/ProjectIgnis/textures/bg.png
 COPY packages/echelon-server/deployment/textures/field3.png /usr/local/ProjectIgnis/textures/field3.png

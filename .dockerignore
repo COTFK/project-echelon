@@ -1,1 +1,8 @@
 target/
+.git
+.github
+.vscode
+.idea
+.DS_Store
+node_modules
+.cargo
