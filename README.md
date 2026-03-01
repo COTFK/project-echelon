@@ -2,20 +2,16 @@
 
 A replay-to-video converter for [Project Ignis: EDOPro](https://projectignis.github.io/).
 
-A [reference deployment] is available for testing. **Currently in beta - expect ongoing improvements!**
-
-[reference deployment]: https://echelon.arqalite.org/
-
 ## Quick Start
 
 ### Using the Discord Bot (`@Echelon`)
 
 Add the bot to your own server using this [install link](https://discord.com/oauth2/authorize?client_id=1452676046326595605).
 
-1. **Send a replay** - DM or mention the bot with a `.yrpX` file attached
-2. **Get queued** - Bot confirms your replay is queued with a unique ID
-3. **Wait for processing** - Bot sends status updates as the replay is processed
-4. **Download video** - Bot sends the finished MP4 when ready
+1. **Send a replay** - call the `/echelon convert` command and attach your replay file
+2. **Get queued** - Echelon confirms your replay is queued
+3. **Wait for processing** - You'll receive status updates as the replay is processed
+4. **Download video** - Echelon sends the finished MP4 when ready
 
 ### Using the Web UI
 
@@ -25,12 +21,12 @@ Add the bot to your own server using this [install link](https://discord.com/oau
 
 ## Packages
 
-The project consists of three independent services:
+The project consists of three independent services and a custom fork of EDOPro:
 
 - **[echelon-server](packages/echelon-server)** - Core replay processing (Rust + Axum)
   - Handles replay validation and video encoding
   - Manages job queue and processing state
-  - Requires: Xvfb, ffmpeg, EDOPro
+  - Requires: Xvfb, ffmpeg, oEDOPro
 
 - **[echelon-discord](packages/echelon-discord)** - Discord bot frontend (Rust + Serenity)
   - Accepts replay uploads via Discord DMs/mentions
@@ -41,8 +37,11 @@ The project consists of three independent services:
   - Simple file upload interface
   - Real-time job status tracking
   - Video download link
-
-Additionally, a custom fork of EDOPro was required to support Echelon - more about that here: https://git.arqalite.org/COTFK/project-echelon-edopro
+  
+- **[echelon-edopro](https://git.arqalite.org/COTFK/project-echelon-edopro)** - custom fork of EDOPro (C++)
+  - Added offline rendering to audio and video FIFO pipes, for perfectly smooth 60fps video output
+  - Adjusted UI elements to better fit a video recording
+  - Added command line arguments and environment variables to configure EDOPro
 
 ## Local Development
 
@@ -51,6 +50,8 @@ Additionally, a custom fork of EDOPro was required to support Echelon - more abo
 - **Rust** 1.70+
 - **Docker & Docker Compose** (for containerized setup)
 - **Xvfb, ffmpeg** (if running server locally without Docker)
+- Optionally, for `echelon-edopro`, a C++ development environment
+- For the Discord bot, you will need to create an application in the Discord Developer Portal, and obtain your token (DISCORD_TOKEN in our environment)
 
 ### Running the entire system with Docker Compose
 
@@ -72,30 +73,7 @@ For running the packages individually, check their respective `README.md` files.
 
 ## Configuration
 
-### Environment Variables
-
-**Server:**
-
-- `BOT_SECRET` - a secret key (can be any value, as long as you keep it secret!) used to identify requests coming from the Discord bot, and bypass the rate limit
-
-**Discord Bot:**
-
-- `DISCORD_TOKEN` - Discord bot authentication token (required)
-- `ECHELON_SERVER_URL` - Server URL (defaults to `http://server:3000`)]
-- `BOT_SECRET` - a secret key (can be any value, as long as you keep it secret!) to bypass server rate limits
-
-**Web UI:**
-
-- `API_BASE_URL` - Backend server URL (required for deployment)
-
-### Docker Compose
-
-All services use an `.env` file. Key variables:
-
-```bash
-DISCORD_TOKEN=your_bot_token_here
-ECHELON_SERVER_URL=http://server:3000  # Internal Docker network
-```
+Project Echelon is configured exclusively via environment variables. A `.env.example` file is provided in the repository root, listing all the environment variables and example values where applicable.
 
 ## Testing
 
@@ -128,7 +106,7 @@ For example, to use the latest version of Echelon, run the following images:
 
 ## Contributing
 
-We accept contributions! Submit your patches in the [Fire King Discord server](https://discord.gg/8JtxHUAdGq).
+We accept contributions! Reach out to us in the [Fire King Discord server](https://discord.gg/8JtxHUAdGq) to get access!
 
 ## License
 
