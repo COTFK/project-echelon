@@ -23,8 +23,6 @@ A Discord bot that interfaces with [echelon-server](/packages/echelon-server) an
 2. Click "New Application" and give it a name
 3. Go to the "Bot" section and click "Add Bot"
 4. Under the TOKEN section, click "Copy" to copy your bot token
-5. Enable these **Privileged Gateway Intents**:
-   - Message Content Intent
 
 ### Configure Environment Variables
 Create a `.env` file in this directory:
@@ -36,7 +34,7 @@ ECHELON_SERVER_URL=http://localhost:3000  # Point it to your instance of echelon
 ### Invite the Bot to Your Server
 1. In Developer Portal, go to OAuth2 → URL Generator
 2. Select scopes: `bot`
-3. Select permissions: `Send Messages`, `Read Messages/View Channels`, `Attach Files`
+3. Select permissions: `Send Messages`
 4. Copy the generated URL and open it in your browser to invite the bot
 
 ## Running the Bot
@@ -54,8 +52,7 @@ For testing with a separate bot instance:
 3. Run with a different token to test without affecting the production bot
 
 ## How to Use
-- **In DMs:** Send the bot a `*.yrpX` file
-- **In a channel:** Mention the bot and attach a `*.yrpX` file (e.g., `@Echelon` with file)
+Call the `/echelon convert` command and attach your replay file.
 
 The bot will:
 1. Acknowledge receipt with a replay ID
