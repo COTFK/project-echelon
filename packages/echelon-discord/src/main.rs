@@ -23,9 +23,6 @@ const POLL_INTERVAL_DEFAULT_SECS: u64 = 10; // Poll every 10s for other states
 const STALE_STATUS_THRESHOLD_SECS: u64 = 60;
 const MAX_MONITORING_DURATION_SECS: u64 = 3660; // Maximum 1 hour of monitoring + 1 minute grace period
 
-/// Discord's file size limit in bytes (10MB for non-Nitro users)
-const DISCORD_FILE_LIMIT_BYTES: usize = 10 * 1024 * 1024;
-
 struct Handler;
 
 #[async_trait]
@@ -410,28 +407,6 @@ async fn send_video_message(
         Ok(video_data) => {
             let video_size = video_data.len();
             let video_size_mb = video_size as f64 / (1024.0 * 1024.0);
-
-            // Check if video exceeds Discord's file size limit
-            if video_size > DISCORD_FILE_LIMIT_BYTES {
-                info!(
-                    "Video for replay {id} is too large for Discord ({:.2} MB)",
-                    video_size_mb
-                );
-                let msg = format!(
-                    "{} ✅ Replay processed successfully! \n\n\
-                    However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
-                    📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
-                    ℹ️ The preview below works only during this 1-hour window.",
-                    requester_id.mention(),
-                    video_size_mb,
-                    server_url,
-                    id
-                );
-                if let Err(e) = channel_id.say(http, &msg).await {
-                    error!("Failed to send too-large notification: {e}");
-                }
-                return;
-            }
 
             let filename = format!("{id}.mp4");
             match channel_id
