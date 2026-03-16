@@ -420,7 +420,8 @@ async fn send_video_message(
                 let msg = format!(
                     "{} ✅ Replay processed successfully! \n\n\
                     However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
-                    📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                    📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
+                    ℹ️ The preview below works only during this 1-hour window.",
                     requester_id.mention(),
                     video_size_mb,
                     server_url,
@@ -453,7 +454,8 @@ async fn send_video_message(
                         format!(
                             "{} ✅ Replay processed successfully! \n\n\
                             However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
-                            📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                            📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
+                            ℹ️ The preview below works only during this 1-hour window.",
                             requester_id.mention(),
                             video_size_mb,
                             server_url,
@@ -463,7 +465,8 @@ async fn send_video_message(
                         format!(
                             "{} ✅ Replay processed successfully! \n\n\
                             However, we failed to send the video through Discord.\n\n\
-                            📥 **Download your recording here (available for 1 hour):** <{}/download/{}>",
+                            📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
+                            ℹ️ The preview below works only during this 1-hour window.",
                             requester_id.mention(),
                             server_url,
                             id
