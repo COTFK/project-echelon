@@ -33,6 +33,10 @@
 			"type": "pic"
 		},
 		{
+			"url": "https://pics.projectignis.org:2096/pics/{}.jpg",
+			"type": "pic"
+		},
+		{
 			"url": "https://images.ygoprodeck.com/images/cards_cropped/{}.jpg",
 			"type": "field"
 		},
