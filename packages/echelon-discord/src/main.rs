@@ -413,7 +413,7 @@ async fn send_video_message(
                 .send_message(
                     http,
                     serenity::builder::CreateMessage::new()
-                        .content(format!("{} ✅ Replay is ready!", requester_id.mention()))
+                        .content(format!("✅ {}, your replay is ready!", requester_id.mention()))
                         .add_file(serenity::builder::CreateAttachment::bytes(
                             video_data, filename,
                         )),
@@ -422,25 +422,23 @@ async fn send_video_message(
             {
                 Ok(_) => info!("Sent video for replay {id} ({:.2} MB)", video_size_mb),
                 Err(e) => {
-                    error!("Failed to send video message: {e}");
                     // Check if the error is due to file size (Discord might reject it)
                     let error_str = e.to_string();
+                    info!("Failed to attach video: {e} - trying download link instead.");
+
                     let msg = if error_str.contains("40005") || error_str.contains("too large") {
                         format!(
-                            "{} ✅ Replay processed successfully! \n\n\
-                            However, the video is too large for Discord ({:.1} MB, limit is 10 MB).\n\n\
-                            📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
+                            "✅ {}, your replay is ready! However, the video is too large for Discord.\n\n\
+                            📥 **Download it here (available for 1 hour):**\n{}/download/{}\n\n\
                             ℹ️ The preview below works only during this 1-hour window.",
                             requester_id.mention(),
-                            video_size_mb,
                             server_url,
                             id
                         )
                     } else {
                         format!(
-                            "{} ✅ Replay processed successfully! \n\n\
-                            However, we failed to send the video through Discord.\n\n\
-                            📥 **Download your recording here (available for 1 hour):**\n{}/download/{}\n\n\
+                            "✅ {}, your replay is ready! However, we failed to send the video through Discord.\n\n\
+                            📥 **Download it here (available for 1 hour):**\n{}/download/{}\n\n\
                             ℹ️ The preview below works only during this 1-hour window.",
                             requester_id.mention(),
                             server_url,
