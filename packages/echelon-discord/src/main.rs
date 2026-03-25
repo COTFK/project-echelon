@@ -5,8 +5,8 @@ use serenity::all::{
 use serenity::async_trait;
 use serenity::builder::{
     CreateActionRow, CreateButton, CreateInteractionResponse,
-    CreateInteractionResponseMessage, CreateSelectMenu, CreateSelectMenuKind,
-    CreateSelectMenuOption,
+    CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
+    CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption,
 };
 use serenity::client::{Client, Context, EventHandler};
 use serenity::model::prelude::Attachment;
@@ -36,6 +36,7 @@ const ADVANCED_COMPONENT_TTL_SECS: u64 = 900;
 struct PendingAdvancedRequest {
     attachment: Attachment,
     user_id: UserId,
+    status_msg_id: MessageId,
     created_at: Instant,
     config: ReplayConfig,
 }
@@ -501,6 +502,34 @@ impl Handler {
 
         let token = command.id.get().to_string();
         let config = ReplayConfig::default();
+
+        if let Err(e) = command.defer(&ctx.http).await {
+            error!("Failed to defer advanced command response: {e}");
+            return;
+        }
+
+        let status_msg = match command.get_response(&ctx.http).await {
+            Ok(message) => message,
+            Err(e) => {
+                error!("Failed to get deferred advanced response: {e}");
+                return;
+            }
+        };
+
+        if let Err(e) = command
+            .edit_response(
+                &ctx.http,
+                serenity::builder::EditInteractionResponse::new().content(format!(
+                    "🛠️ Waiting for advanced settings from {}...",
+                    command.user.mention()
+                )),
+            )
+            .await
+        {
+            error!("Failed to edit advanced status message: {e}");
+            return;
+        }
+
         let store = Self::advanced_store(ctx).await;
         {
             let mut map = store.write().await;
@@ -510,6 +539,7 @@ impl Handler {
                 PendingAdvancedRequest {
                     attachment,
                     user_id: command.user.id,
+                    status_msg_id: status_msg.id,
                     created_at: Instant::now(),
                     config: config.clone(),
                 },
@@ -517,18 +547,17 @@ impl Handler {
         }
 
         let components = Self::build_advanced_components(&token, &config);
-        let response = CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
+        let followup = CreateInteractionResponseFollowup::new()
                 .content(Self::advanced_panel_content())
                 .ephemeral(true)
-                .components(components),
-        );
+                .components(components);
 
-        if let Err(e) = command.create_response(&ctx.http, response).await {
+        if let Err(e) = command.create_followup(&ctx.http, followup).await {
             error!("Failed to open advanced settings: {e}");
             let store = Self::advanced_store(ctx).await;
             let mut map = store.write().await;
             map.remove(&token);
+            let _ = command.delete_response(&ctx.http).await;
         }
     }
 
@@ -642,6 +671,17 @@ impl Handler {
                         pending.user_id,
                         pending.created_at.elapsed().as_millis()
                     );
+
+                        if let Err(e) = component
+                            .channel_id
+                            .delete_message(&ctx.http, pending.status_msg_id)
+                            .await
+                        {
+                            warn!(
+                                "Failed to delete advanced status message after cancel: {}",
+                                e
+                            );
+                        }
                 } else {
                     warn!(
                         "[advanced:{}] cancel received but request was already removed",
@@ -703,31 +743,28 @@ impl Handler {
                 let http = ctx.http.clone();
                 let channel_id = component.channel_id;
                 let requester_id = component.user.id;
-                let status_msg = match channel_id
-                    .say(
+                if let Err(e) = channel_id
+                    .edit_message(
                         &ctx.http,
-                        format!(
+                        pending.status_msg_id,
+                        serenity::builder::EditMessage::new().content(format!(
                             "⏳ Uploading replay for {}...",
                             requester_id.mention()
-                        ),
+                        )),
                     )
                     .await
                 {
-                    Ok(message) => message,
-                    Err(e) => {
-                        error!("Failed to post advanced status message: {e}");
-                        Self::notify_advanced_start_failure(ctx, requester_id, channel_id).await;
-                        return;
-                    }
-                };
-                let status_msg_id = status_msg.id;
+                    error!("Failed to update advanced status message: {e}");
+                    Self::notify_advanced_start_failure(ctx, requester_id, channel_id).await;
+                    return;
+                }
 
                 tokio::spawn(Self::process_advanced_request(
                     server_url,
                     pending.config,
                     pending.attachment,
                     channel_id,
-                    status_msg_id,
+                    pending.status_msg_id,
                     requester_id,
                     http,
                 ));
@@ -1025,20 +1062,6 @@ async fn send_video_message(
     requester_id: UserId,
     status_msg_id: MessageId,
 ) {
-    let mut final_message_sent = false;
-
-    if let Err(e) = channel_id
-        .edit_message(
-            http,
-            status_msg_id,
-            serenity::builder::EditMessage::new()
-                .content("📥 Done! Preparing to send the video..."),
-        )
-        .await
-    {
-        warn!("Failed to update status message: {e}");
-    }
-
     match download_video(server_url, id).await {
         Ok(video_data) => {
             let video_size = video_data.len();
@@ -1046,24 +1069,29 @@ async fn send_video_message(
 
             let filename = format!("{id}.mp4");
             match channel_id
-                .send_message(
+                .edit_message(
                     http,
-                    serenity::builder::CreateMessage::new()
+                    status_msg_id,
+                    serenity::builder::EditMessage::new()
                         .content(format!("✅ {}, your replay is ready!", requester_id.mention()))
-                        .add_file(serenity::builder::CreateAttachment::bytes(
+                        .new_attachment(serenity::builder::CreateAttachment::bytes(
                             video_data, filename,
                         )),
                 )
                 .await
             {
                 Ok(_) => {
-                    final_message_sent = true;
-                    info!("Sent video for replay {id} ({:.2} MB)", video_size_mb)
+                    info!(
+                        "Attached and sent video on status message for replay {id} ({:.2} MB)",
+                        video_size_mb
+                    )
                 }
                 Err(e) => {
                     // Check if the error is due to file size (Discord might reject it)
                     let error_str = e.to_string();
-                    info!("Failed to attach video: {e} - trying download link instead.");
+                    info!(
+                        "Failed to attach video to status message: {e} - trying download link instead."
+                    );
 
                     let msg = if error_str.contains("40005") || error_str.contains("too large") {
                         format!(
@@ -1084,11 +1112,16 @@ async fn send_video_message(
                             id
                         )
                     };
-                    match channel_id.say(http, &msg).await {
-                        Ok(_) => {
-                            final_message_sent = true;
-                        }
-                        Err(send_err) => {
+                    if let Err(edit_err) = channel_id
+                        .edit_message(
+                            http,
+                            status_msg_id,
+                            serenity::builder::EditMessage::new().content(&msg),
+                        )
+                        .await
+                    {
+                        error!("Failed to edit status message with fallback link: {edit_err}");
+                        if let Err(send_err) = channel_id.say(http, &msg).await {
                             error!("Failed to send fallback message: {send_err}");
                         }
                     }
@@ -1108,16 +1141,20 @@ async fn send_video_message(
             } else {
                 format!("[`{id}`] ⚠️ Replay processed but video download failed: {e}")
             };
-            if let Err(e) = channel_id.say(http, &error_msg).await {
-                error!("Failed to send final message: {e}");
+            if let Err(edit_err) = channel_id
+                .edit_message(
+                    http,
+                    status_msg_id,
+                    serenity::builder::EditMessage::new().content(&error_msg),
+                )
+                .await
+            {
+                error!("Failed to edit final error status message: {edit_err}");
+                if let Err(e) = channel_id.say(http, &error_msg).await {
+                    error!("Failed to send final message: {e}");
+                }
             }
         }
-    }
-
-    if final_message_sent
-        && let Err(e) = channel_id.delete_message(http, status_msg_id).await
-    {
-        warn!("Failed to delete status message after sending final result: {e}");
     }
 }
 
