@@ -1025,6 +1025,8 @@ async fn send_video_message(
     requester_id: UserId,
     status_msg_id: MessageId,
 ) {
+    let mut final_message_sent = false;
+
     if let Err(e) = channel_id
         .edit_message(
             http,
@@ -1054,7 +1056,10 @@ async fn send_video_message(
                 )
                 .await
             {
-                Ok(_) => info!("Sent video for replay {id} ({:.2} MB)", video_size_mb),
+                Ok(_) => {
+                    final_message_sent = true;
+                    info!("Sent video for replay {id} ({:.2} MB)", video_size_mb)
+                }
                 Err(e) => {
                     // Check if the error is due to file size (Discord might reject it)
                     let error_str = e.to_string();
@@ -1079,8 +1084,13 @@ async fn send_video_message(
                             id
                         )
                     };
-                    if let Err(send_err) = channel_id.say(http, &msg).await {
-                        error!("Failed to send fallback message: {send_err}");
+                    match channel_id.say(http, &msg).await {
+                        Ok(_) => {
+                            final_message_sent = true;
+                        }
+                        Err(send_err) => {
+                            error!("Failed to send fallback message: {send_err}");
+                        }
                     }
                 }
             }
@@ -1102,6 +1112,12 @@ async fn send_video_message(
                 error!("Failed to send final message: {e}");
             }
         }
+    }
+
+    if final_message_sent
+        && let Err(e) = channel_id.delete_message(http, status_msg_id).await
+    {
+        warn!("Failed to delete status message after sending final result: {e}");
     }
 }
 
