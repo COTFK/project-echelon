@@ -875,6 +875,48 @@ async fn send_video_message(
     requester_id: UserId,
     status_msg_id: MessageId,
 ) {
+    async fn send_owner_notification(
+        channel_id: &ChannelId,
+        http: &Http,
+        requester_id: UserId,
+        message: &str,
+    ) {
+        if let Err(e) = channel_id
+            .send_message(
+                http,
+                serenity::builder::CreateMessage::new().content(format!(
+                    "{} {}",
+                    requester_id.mention(),
+                    message
+                )),
+            )
+            .await
+        {
+            warn!("Failed to send owner notification message: {e}");
+        }
+    }
+
+    fn replay_download_fallback_message(
+        server_url: &str,
+        id: &str,
+        attachment_too_large: bool,
+    ) -> String {
+        let reason = if attachment_too_large {
+            "the video is too large for Discord"
+        } else {
+            "we failed to send the video through Discord"
+        };
+
+        format!(
+            "✅ Your replay is ready! However, {}.\n\n\
+            📥 **Download it here (available for 1 hour):**\n{}/download/{}\n\n\
+            ℹ️ The preview below works only during this 1-hour window.",
+            reason,
+            server_url,
+            id
+        )
+    }
+
     match download_video(server_url, id).await {
         Ok(video_data) => {
             let video_size = video_data.len();
@@ -886,7 +928,7 @@ async fn send_video_message(
                     http,
                     status_msg_id,
                     serenity::builder::EditMessage::new()
-                        .content(format!("✅ {}, your replay is ready!", requester_id.mention()))
+                        .content("")
                         .new_attachment(serenity::builder::CreateAttachment::bytes(
                             video_data, filename,
                         )),
@@ -894,6 +936,14 @@ async fn send_video_message(
                 .await
             {
                 Ok(_) => {
+                    send_owner_notification(
+                        channel_id,
+                        http,
+                        requester_id,
+                        ", your replay is ready!",
+                    )
+                    .await;
+
                     info!(
                         "Attached and sent video on status message for replay {id} ({:.2} MB)",
                         video_size_mb
@@ -905,42 +955,47 @@ async fn send_video_message(
                         "Failed to attach video to status message: {e} - trying download link instead."
                     );
 
-                    let msg = if error_str.contains("40005") || error_str.contains("too large") {
-                        format!(
-                            "✅ {}, your replay is ready! However, the video is too large for Discord.\n\n\
-                            📥 **Download it here (available for 1 hour):**\n{}/download/{}\n\n\
-                            ℹ️ The preview below works only during this 1-hour window.",
-                            requester_id.mention(),
-                            server_url,
-                            id
-                        )
-                    } else {
-                        format!(
-                            "✅ {}, your replay is ready! However, we failed to send the video through Discord.\n\n\
-                            📥 **Download it here (available for 1 hour):**\n{}/download/{}\n\n\
-                            ℹ️ The preview below works only during this 1-hour window.",
-                            requester_id.mention(),
-                            server_url,
-                            id
-                        )
-                    };
+                    send_owner_notification(
+                        channel_id,
+                        http,
+                        requester_id,
+                        ", your replay is ready!",
+                    )
+                    .await;
+
+                    let msg = replay_download_fallback_message(
+                        server_url,
+                        id,
+                        error_str.contains("40005") || error_str.contains("too large"),
+                    );
                     update_status_message(*channel_id, http, status_msg_id, &msg).await;
                 }
             }
         }
         Err(e) => {
             error!("Failed to download video: {e}");
-            let error_msg = if e.contains("404") {
-                format!(
-                    "[`{id}`] ❌ Video generation failed or has expired. Please re-upload the replay to try again."
+            let (error_msg, owner_msg) = if e.contains("404") {
+                (
+                    format!(
+                        "[`{id}`] ❌ Video generation failed or has expired. Please re-upload the replay to try again."
+                    ),
+                    "❌ your replay video generation failed or has expired. Please re-upload the replay and try again.",
                 )
             } else if e.contains("Request failed") {
-                format!(
-                    "[`{id}`] ⚠️ Unable to download the completed video. The processing server is unreachable."
+                (
+                    format!(
+                        "[`{id}`] ⚠️ Unable to download the completed video. The processing server is unreachable."
+                    ),
+                    "⚠️ your replay finished processing, but the video download failed because the processing server is unreachable.",
                 )
             } else {
-                format!("[`{id}`] ⚠️ Replay processed but video download failed: {e}")
+                (
+                    format!("[`{id}`] ⚠️ Replay processed but video download failed: {e}"),
+                    "⚠️ your replay finished processing, but we couldn't download the completed video.",
+                )
             };
+
+            send_owner_notification(channel_id, http, requester_id, owner_msg).await;
             update_status_message(*channel_id, http, status_msg_id, &error_msg).await;
         }
     }
