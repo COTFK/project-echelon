@@ -11,9 +11,11 @@ use std::time::Duration;
 
 /// Cached server URL, initialized once on first access.
 static SERVER_URL: OnceLock<String> = OnceLock::new();
+/// Shared HTTP client, initialized once and reused for connection pooling.
+static HTTP_CLIENT: OnceLock<HttpClient> = OnceLock::new();
 
 /// Represents the status of a replay processing job from the server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status")]
 pub enum ReplayStatus {
     #[serde(rename = "queued")]
@@ -94,6 +96,10 @@ fn create_http_client() -> HttpClient {
         .expect("Failed to build HTTP client")
 }
 
+fn get_http_client() -> &'static HttpClient {
+    HTTP_CLIENT.get_or_init(create_http_client)
+}
+
 /// Creates a replay job with default configuration (no customization for Discord bot).
 /// Returns the unique ID assigned to the replay.
 pub async fn create_replay(server_url: &str) -> Result<String, String> {
@@ -106,7 +112,7 @@ pub async fn create_replay_with_config(
     server_url: &str,
     config: &ReplayConfig,
 ) -> Result<String, String> {
-    let client = create_http_client();
+    let client = get_http_client();
     let create_url = format!("{}/create", server_url);
 
     let mut request = client
@@ -148,8 +154,8 @@ pub async fn create_replay_with_config(
 }
 
 /// Uploads a replay file to the echelon server for a given task ID.
-pub async fn upload_replay(server_url: &str, task_id: &str, data: &[u8]) -> Result<(), String> {
-    let client = create_http_client();
+pub async fn upload_replay(server_url: &str, task_id: &str, data: Vec<u8>) -> Result<(), String> {
+    let client = get_http_client();
     let upload_url = format!("{}/upload?task_id={}", server_url, task_id);
 
     let mut request = client
@@ -164,7 +170,7 @@ pub async fn upload_replay(server_url: &str, task_id: &str, data: &[u8]) -> Resu
     }
 
     let response = request
-        .body(data.to_vec())
+        .body(data)
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?;
@@ -178,7 +184,7 @@ pub async fn upload_replay(server_url: &str, task_id: &str, data: &[u8]) -> Resu
 
 /// Fetches the current status of a replay from the server.
 pub async fn get_replay_status(server_url: &str, id: &str) -> Result<ReplayStatus, String> {
-    let client = create_http_client();
+    let client = get_http_client();
     let status_url = format!("{}/status/{}", server_url, id);
 
     let response = client
@@ -201,7 +207,7 @@ pub async fn get_replay_status(server_url: &str, id: &str) -> Result<ReplayStatu
 
 /// Downloads a finished replay video from the server.
 pub async fn download_video(server_url: &str, id: &str) -> Result<Vec<u8>, String> {
-    let client = create_http_client();
+    let client = get_http_client();
     let download_url = format!("{}/download/{}", server_url, id);
 
     let response = client

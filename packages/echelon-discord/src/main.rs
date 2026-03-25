@@ -403,7 +403,7 @@ impl Handler {
                 match create_replay(server_url).await {
                     Ok(task_id) => {
                         // Step 2: Upload the replay file
-                        match upload_replay(server_url, &task_id, &data).await {
+                        match upload_replay(server_url, &task_id, data).await {
                             Ok(()) => {
                                 if let Err(e) = command
                                     .edit_response(
@@ -807,7 +807,7 @@ impl Handler {
             Ok(data) => {
                 match create_replay_with_config(server_url, &config).await {
                     Ok(task_id) => {
-                        match upload_replay(server_url, &task_id, &data).await {
+                        match upload_replay(server_url, &task_id, data).await {
                             Ok(()) => {
                                 if let Err(e) = channel_id
                                     .edit_message(
@@ -962,7 +962,7 @@ async fn monitor_replay(
             Ok(status) => {
                 let status_changed = last_status
                     .as_ref()
-                    .is_none_or(|last| format!("{:?}", last) != format!("{:?}", status));
+                    .is_none_or(|last| last != &status);
 
                 let should_update = status_changed
                     || last_update.elapsed() >= Duration::from_secs(STALE_STATUS_THRESHOLD_SECS);
