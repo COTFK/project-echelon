@@ -52,7 +52,7 @@ impl VideoPreset {
         }
     }
 
-    pub fn from_str(value: &str) -> Self {
+    pub fn from_str_name(value: &str) -> Self {
         match value {
             "file_size" => VideoPreset::FileSize,
             "quality" => VideoPreset::Quality,
@@ -100,10 +100,12 @@ fn get_http_client() -> &'static HttpClient {
     HTTP_CLIENT.get_or_init(create_http_client)
 }
 
-/// Creates a replay job with default configuration (no customization for Discord bot).
-/// Returns the unique ID assigned to the replay.
-pub async fn create_replay(server_url: &str) -> Result<String, String> {
-    create_replay_with_config(server_url, &ReplayConfig::default()).await
+/// Adds bot authentication header to a request if BOT_SECRET is set.
+fn add_bot_auth(mut request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    if let Some(bot_secret) = env::var("BOT_SECRET").ok().filter(|s| !s.is_empty()) {
+        request = request.header("X-Bot-Secret", bot_secret);
+    }
+    request
 }
 
 /// Creates a replay job with the provided configuration.
@@ -115,16 +117,10 @@ pub async fn create_replay_with_config(
     let client = get_http_client();
     let create_url = format!("{}/create", server_url);
 
-    let mut request = client
+    let request = client
         .post(&create_url)
         .header("Content-Type", "application/json");
-
-    // Add bot secret token if configured (to bypass rate limiting)
-    if let Ok(bot_secret) = env::var("BOT_SECRET") {
-        if !bot_secret.is_empty() {
-            request = request.header("X-Bot-Secret", bot_secret);
-        }
-    }
+    let request = add_bot_auth(request);
 
     let body = json!({
         "top_down_view": config.top_down_view,
@@ -158,16 +154,10 @@ pub async fn upload_replay(server_url: &str, task_id: &str, data: Vec<u8>) -> Re
     let client = get_http_client();
     let upload_url = format!("{}/upload?task_id={}", server_url, task_id);
 
-    let mut request = client
+    let request = client
         .post(&upload_url)
         .header("Content-Type", "application/octet-stream");
-
-    // Add bot secret token if configured (to bypass rate limiting)
-    if let Ok(bot_secret) = env::var("BOT_SECRET") {
-        if !bot_secret.is_empty() {
-            request = request.header("X-Bot-Secret", bot_secret);
-        }
-    }
+    let request = add_bot_auth(request);
 
     let response = request
         .body(data)

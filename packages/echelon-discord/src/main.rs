@@ -19,9 +19,12 @@ use tracing::{error, info, warn};
 
 mod api;
 use api::{
-    ReplayConfig, ReplayStatus, VideoPreset, create_replay, create_replay_with_config,
+    ReplayConfig, ReplayStatus, VideoPreset, create_replay_with_config,
     download_video, get_replay_status, get_server_url, upload_replay, validate_server_url,
 };
+
+mod helpers;
+use helpers::{translate_api_error, update_status_message, validate_replay_file};
 
 type Http = Arc<serenity::http::Http>;
 
@@ -176,23 +179,6 @@ impl Handler {
         })
     }
 
-    fn parse_bool(value: &str) -> Option<bool> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "true" | "t" | "yes" | "y" | "1" | "on" => Some(true),
-            "false" | "f" | "no" | "n" | "0" | "off" => Some(false),
-            _ => None,
-        }
-    }
-
-    fn parse_video_preset(value: &str) -> Option<VideoPreset> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "file_size" | "filesize" | "file-size" => Some(VideoPreset::FileSize),
-            "balanced" => Some(VideoPreset::Balanced),
-            "quality" => Some(VideoPreset::Quality),
-            _ => None,
-        }
-    }
-
     fn parse_component_custom_id(custom_id: &str) -> Option<(String, String)> {
         let rest = custom_id.strip_prefix(ADVANCED_COMPONENT_PREFIX)?;
         let (token, action) = rest.split_once(':')?;
@@ -307,16 +293,6 @@ impl Handler {
         });
     }
 
-    /// Sends an error response to the command interaction.
-    async fn respond_with_error(ctx: &Context, command: &CommandInteraction, message: &str) {
-        let _ = command
-            .edit_response(
-                &ctx.http,
-                serenity::builder::EditInteractionResponse::new().content(message),
-            )
-            .await;
-    }
-
     /// Sends an immediate message response to a command interaction.
     async fn respond_with_command_message(
         ctx: &Context,
@@ -376,108 +352,51 @@ impl Handler {
 
     /// Handles the /echelon convert command.
     async fn handle_convert_command(&self, ctx: &Context, command: &CommandInteraction) {
-        // Defer the response immediately
+        let file_attachment = Self::extract_file_attachment(command, "convert");
+
+        let Some(attachment) = file_attachment else {
+            Self::respond_with_command_message(ctx, command, "❌ No file attachment provided").await;
+            return;
+        };
+
+        if let Err(msg) = validate_replay_file(&attachment.filename) {
+            Self::respond_with_command_message(ctx, command, msg).await;
+            return;
+        }
+
         if let Err(e) = command.defer(&ctx.http).await {
             error!("Failed to defer command response: {e}");
             return;
         }
 
-        // Get the file attachment from the convert subcommand
-        let file_attachment = Self::extract_file_attachment(command, "convert");
-
-        let Some(attachment) = file_attachment else {
-            Self::respond_with_error(ctx, command, "❌ No file attachment provided").await;
+        if let Err(e) = command
+            .edit_response(
+                &ctx.http,
+                serenity::builder::EditInteractionResponse::new()
+                    .content(format!("⏳ Preparing replay for {}...", command.user.mention())),
+            )
+            .await
+        {
+            error!("Failed to edit command response: {e}");
             return;
+        }
+
+        let status_msg_id = match command.get_response(&ctx.http).await {
+            Ok(msg) => msg.id,
+            Err(e) => {
+                error!("Failed to get deferred convert response: {e}");
+                return;
+            }
         };
 
-        if !attachment.filename.ends_with(".yrpX") {
-            Self::respond_with_error(ctx, command, "❌ Please upload a `.yrpX` replay file").await;
-            return;
-        }
-
-        match attachment.download().await {
-            Ok(data) => {
-                let server_url = get_server_url();
-
-                // Step 1: Create a replay job with default config
-                match create_replay(server_url).await {
-                    Ok(task_id) => {
-                        // Step 2: Upload the replay file
-                        match upload_replay(server_url, &task_id, data).await {
-                            Ok(()) => {
-                                if let Err(e) = command
-                                    .edit_response(
-                                        &ctx.http,
-                                        serenity::builder::EditInteractionResponse::new()
-                                            .content("📋 Replay queued!"),
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to edit command response: {e}");
-                                    return;
-                                }
-
-                                match command.get_response(&ctx.http).await {
-                                    Ok(status_msg) => {
-                                        let channel_id = command.channel_id;
-                                        let http = ctx.http.clone();
-                                        let requester_id = command.user.id;
-
-                                        tokio::spawn(monitor_replay(
-                                            server_url,
-                                            task_id,
-                                            channel_id,
-                                            status_msg.id,
-                                            requester_id,
-                                            http,
-                                        ));
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to get response message: {e}");
-                                        Self::respond_with_error(
-                                            ctx,
-                                            command,
-                                            &format!("[`{task_id}`] ⚠️ Replay was queued but we couldn't start monitoring. Check back later or try again."),
-                                        ).await;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to upload replay: {e}");
-                                let error_msg = if e.contains("500") {
-                                    "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
-                                } else if e.contains("Request failed") {
-                                    "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
-                                } else {
-                                    "❌ Upload failed. Please try again."
-                                };
-                                Self::respond_with_error(ctx, command, error_msg).await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to create replay job: {e}");
-                        let error_msg = if e.contains("500") {
-                            "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
-                        } else if e.contains("Request failed") {
-                            "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
-                        } else {
-                            "❌ Failed to create replay job. Please try again."
-                        };
-                        Self::respond_with_error(ctx, command, error_msg).await;
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to download attachment: {e}");
-                let error_msg = if e.to_string().contains("timeout") {
-                    "❌ Download timed out. The file might be too large or the connection is slow. Please try again."
-                } else {
-                    "❌ Failed to download the file. Please check the file size and try again."
-                };
-                Self::respond_with_error(ctx, command, error_msg).await;
-            }
-        }
+        tokio::spawn(Self::process_replay_request(
+            ReplayConfig::default(),
+            attachment,
+            command.channel_id,
+            status_msg_id,
+            command.user.id,
+            ctx.http.clone(),
+        ));
     }
 
     /// Handles the /echelon advanced command.
@@ -490,13 +409,8 @@ impl Handler {
             return;
         };
 
-        if !attachment.filename.ends_with(".yrpX") {
-            Self::respond_with_command_message(
-                ctx,
-                command,
-                "❌ Please upload a `.yrpX` replay file",
-            )
-            .await;
+        if let Err(msg) = validate_replay_file(&attachment.filename) {
+            Self::respond_with_command_message(ctx, command, msg).await;
             return;
         }
 
@@ -627,14 +541,10 @@ impl Handler {
                     let open_ms = pending.created_at.elapsed().as_millis();
                     match action.as_str() {
                         "top_down_view" => {
-                            if let Some(parsed) = Self::parse_bool(&value) {
-                                pending.config.top_down_view = parsed;
-                            }
+                            pending.config.top_down_view = value == "true";
                         }
                         "swap_players" => {
-                            if let Some(parsed) = Self::parse_bool(&value) {
-                                pending.config.swap_players = parsed;
-                            }
+                            pending.config.swap_players = value == "true";
                         }
                         "game_speed" => {
                             if let Ok(parsed) = value.parse::<f64>() {
@@ -642,9 +552,7 @@ impl Handler {
                             }
                         }
                         "video_preset" => {
-                            if let Some(parsed) = Self::parse_video_preset(&value) {
-                                pending.config.video_preset = parsed;
-                            }
+                            pending.config.video_preset = VideoPreset::from_str_name(&value);
                         }
                         _ => {}
                     }
@@ -739,7 +647,6 @@ impl Handler {
                     warn!("Failed to delete advanced ephemeral response after submit: {e}");
                 }
 
-                let server_url = get_server_url();
                 let http = ctx.http.clone();
                 let channel_id = component.channel_id;
                 let requester_id = component.user.id;
@@ -759,8 +666,7 @@ impl Handler {
                     return;
                 }
 
-                tokio::spawn(Self::process_advanced_request(
-                    server_url,
+                tokio::spawn(Self::process_replay_request(
                     pending.config,
                     pending.attachment,
                     channel_id,
@@ -782,8 +688,7 @@ impl Handler {
         }
     }
 
-    async fn process_advanced_request(
-        server_url: &'static str,
+    async fn process_replay_request(
         config: ReplayConfig,
         attachment: Attachment,
         channel_id: ChannelId,
@@ -791,15 +696,9 @@ impl Handler {
         requester_id: UserId,
         http: Http,
     ) {
-        if !attachment.filename.ends_with(".yrpX") {
-            let _ = channel_id
-                .edit_message(
-                    &http,
-                    status_msg_id,
-                    serenity::builder::EditMessage::new()
-                        .content("❌ Please upload a `.yrpX` replay file"),
-                )
-                .await;
+        let server_url = get_server_url();
+        if let Err(msg) = validate_replay_file(&attachment.filename) {
+            update_status_message(channel_id, &http, status_msg_id, msg).await;
             return;
         }
 
@@ -809,18 +708,7 @@ impl Handler {
                     Ok(task_id) => {
                         match upload_replay(server_url, &task_id, data).await {
                             Ok(()) => {
-                                if let Err(e) = channel_id
-                                    .edit_message(
-                                        &http,
-                                        status_msg_id,
-                                        serenity::builder::EditMessage::new()
-                                            .content("📋 Replay queued!"),
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to edit advanced response: {e}");
-                                    return;
-                                }
+                                update_status_message(channel_id, &http, status_msg_id, "📋 Replay queued!").await;
 
                                 tokio::spawn(monitor_replay(
                                     server_url,
@@ -833,39 +721,15 @@ impl Handler {
                             }
                             Err(e) => {
                                 error!("Failed to upload replay: {e}");
-                                let error_msg = if e.contains("500") {
-                                    "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
-                                } else if e.contains("Request failed") {
-                                    "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
-                                } else {
-                                    "❌ Upload failed. Please try again."
-                                };
-                                let _ = channel_id
-                                    .edit_message(
-                                        &http,
-                                        status_msg_id,
-                                        serenity::builder::EditMessage::new().content(error_msg),
-                                    )
-                                    .await;
+                                let error_msg = translate_api_error(&e, "upload");
+                                update_status_message(channel_id, &http, status_msg_id, error_msg).await;
                             }
                         }
                     }
                     Err(e) => {
                         error!("Failed to create replay job: {e}");
-                        let error_msg = if e.contains("500") {
-                            "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
-                        } else if e.contains("Request failed") {
-                            "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
-                        } else {
-                            "❌ Failed to create replay job. Please try again."
-                        };
-                        let _ = channel_id
-                            .edit_message(
-                                &http,
-                                status_msg_id,
-                                serenity::builder::EditMessage::new().content(error_msg),
-                            )
-                            .await;
+                        let error_msg = translate_api_error(&e, "create");
+                        update_status_message(channel_id, &http, status_msg_id, error_msg).await;
                     }
                 }
             }
@@ -876,13 +740,7 @@ impl Handler {
                 } else {
                     "❌ Failed to download the file. Please check the file size and try again."
                 };
-                let _ = channel_id
-                    .edit_message(
-                        &http,
-                        status_msg_id,
-                        serenity::builder::EditMessage::new().content(error_msg),
-                    )
-                    .await;
+                update_status_message(channel_id, &http, status_msg_id, error_msg).await;
             }
         }
     }
@@ -933,17 +791,7 @@ async fn monitor_replay(
                 "[`{id}`] ⏱️ Monitoring timed out after {} minutes. The job may still be processing. Check the status later or contact us if this persists.",
                 MAX_MONITORING_DURATION_SECS / 60
             );
-            if let Err(e) = channel_id
-                .edit_message(
-                    &http,
-                    status_msg_id,
-                    serenity::builder::EditMessage::new().content(&timeout_message),
-                )
-                .await
-            {
-                error!("Failed to send timeout message: {e}");
-                let _ = channel_id.say(&http, &timeout_message).await;
-            }
+            update_status_message(channel_id, &http, status_msg_id, &timeout_message).await;
             break;
         }
 
@@ -958,7 +806,7 @@ async fn monitor_replay(
 
         tokio::time::sleep(Duration::from_secs(poll_interval_secs)).await;
 
-        match get_replay_status(&server_url, &id).await {
+        match get_replay_status(server_url, &id).await {
             Ok(status) => {
                 let status_changed = last_status
                     .as_ref()
@@ -971,7 +819,7 @@ async fn monitor_replay(
                     send_video_message(
                         &channel_id,
                         &http,
-                        &server_url,
+                        server_url,
                         &id,
                         requester_id,
                         status_msg_id,
@@ -982,16 +830,7 @@ async fn monitor_replay(
 
                 if matches!(status, ReplayStatus::Processing { .. }) || should_update {
                     let message = format_status(&status, Some(update_count));
-                    if let Err(e) = channel_id
-                        .edit_message(
-                            &http,
-                            status_msg_id,
-                            serenity::builder::EditMessage::new().content(message),
-                        )
-                        .await
-                    {
-                        error!("Failed to edit status update: {e}");
-                    }
+                    update_status_message(channel_id, &http, status_msg_id, &message).await;
                     if should_update {
                         last_update = Instant::now();
                     }
@@ -999,20 +838,8 @@ async fn monitor_replay(
                 }
 
                 if let ReplayStatus::Error { message } = &status {
-                    // Update status message with the error before breaking
                     let error_message = format!("[`{id}`] ❌ {message}");
-                    if let Err(e) = channel_id
-                        .edit_message(
-                            &http,
-                            status_msg_id,
-                            serenity::builder::EditMessage::new().content(&error_message),
-                        )
-                        .await
-                    {
-                        error!("Failed to update status message with error: {e}");
-                        // Try sending a new message as fallback
-                        let _ = channel_id.say(&http, &error_message).await;
-                    }
+                    update_status_message(channel_id, &http, status_msg_id, &error_message).await;
                     break;
                 }
 
@@ -1032,21 +859,7 @@ async fn monitor_replay(
                     } else {
                         format!("[`{id}`] ⚠️ Unable to get status updates: {e}")
                     };
-                    // Try to edit the status message first
-                    if let Err(edit_err) = channel_id
-                        .edit_message(
-                            &http,
-                            status_msg_id,
-                            serenity::builder::EditMessage::new().content(&error_message),
-                        )
-                        .await
-                    {
-                        error!("Failed to edit status message: {edit_err}");
-                        // Fallback to sending a new message
-                        if let Err(e) = channel_id.say(&http, &error_message).await {
-                            error!("Failed to send error update: {e}");
-                        }
-                    }
+                    update_status_message(channel_id, &http, status_msg_id, &error_message).await;
                     break;
                 }
             }
@@ -1087,7 +900,6 @@ async fn send_video_message(
                     )
                 }
                 Err(e) => {
-                    // Check if the error is due to file size (Discord might reject it)
                     let error_str = e.to_string();
                     info!(
                         "Failed to attach video to status message: {e} - trying download link instead."
@@ -1112,19 +924,7 @@ async fn send_video_message(
                             id
                         )
                     };
-                    if let Err(edit_err) = channel_id
-                        .edit_message(
-                            http,
-                            status_msg_id,
-                            serenity::builder::EditMessage::new().content(&msg),
-                        )
-                        .await
-                    {
-                        error!("Failed to edit status message with fallback link: {edit_err}");
-                        if let Err(send_err) = channel_id.say(http, &msg).await {
-                            error!("Failed to send fallback message: {send_err}");
-                        }
-                    }
+                    update_status_message(*channel_id, http, status_msg_id, &msg).await;
                 }
             }
         }
@@ -1141,19 +941,7 @@ async fn send_video_message(
             } else {
                 format!("[`{id}`] ⚠️ Replay processed but video download failed: {e}")
             };
-            if let Err(edit_err) = channel_id
-                .edit_message(
-                    http,
-                    status_msg_id,
-                    serenity::builder::EditMessage::new().content(&error_msg),
-                )
-                .await
-            {
-                error!("Failed to edit final error status message: {edit_err}");
-                if let Err(e) = channel_id.say(http, &error_msg).await {
-                    error!("Failed to send final message: {e}");
-                }
-            }
+            update_status_message(*channel_id, http, status_msg_id, &error_msg).await;
         }
     }
 }
