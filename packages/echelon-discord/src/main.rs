@@ -1,9 +1,17 @@
 use serenity::all::{
-    ChannelId, CommandInteraction, Interaction, MessageId, OnlineStatus, Ready, UserId,
+    ButtonStyle, ChannelId, CommandInteraction, ComponentInteraction,
+    ComponentInteractionDataKind, Interaction, MessageId, OnlineStatus, Ready, UserId,
 };
 use serenity::async_trait;
+use serenity::builder::{
+    CreateActionRow, CreateButton, CreateInteractionResponse,
+    CreateInteractionResponseMessage, CreateSelectMenu, CreateSelectMenuKind,
+    CreateSelectMenuOption,
+};
 use serenity::client::{Client, Context, EventHandler};
+use serenity::model::prelude::Attachment;
 use serenity::prelude::*;
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,8 +19,8 @@ use tracing::{error, info, warn};
 
 mod api;
 use api::{
-    ReplayStatus, create_replay, download_video, get_replay_status, get_server_url, upload_replay,
-    validate_server_url,
+    ReplayConfig, ReplayStatus, VideoPreset, create_replay, create_replay_with_config,
+    download_video, get_replay_status, get_server_url, upload_replay, validate_server_url,
 };
 
 type Http = Arc<serenity::http::Http>;
@@ -22,16 +30,35 @@ const POLL_INTERVAL_PROCESSING_SECS: u64 = 3; // Poll every 3s during processing
 const POLL_INTERVAL_DEFAULT_SECS: u64 = 10; // Poll every 10s for other states
 const STALE_STATUS_THRESHOLD_SECS: u64 = 60;
 const MAX_MONITORING_DURATION_SECS: u64 = 3660; // Maximum 1 hour of monitoring + 1 minute grace period
+const ADVANCED_COMPONENT_PREFIX: &str = "echelon-advanced:";
+const ADVANCED_COMPONENT_TTL_SECS: u64 = 900;
+
+struct PendingAdvancedRequest {
+    attachment: Attachment,
+    user_id: UserId,
+    created_at: Instant,
+    config: ReplayConfig,
+}
+
+struct AdvancedRequestStore;
+
+impl TypeMapKey for AdvancedRequestStore {
+    type Value = Arc<RwLock<HashMap<String, PendingAdvancedRequest>>>;
+}
 
 struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::Command(command) = interaction
-            && command.data.name == "echelon"
-        {
-            self.handle_echelon_command(&ctx, &command).await;
+        match interaction {
+            Interaction::Command(command) if command.data.name == "echelon" => {
+                self.handle_echelon_command(&ctx, &command).await;
+            }
+            Interaction::Component(component) => {
+                self.handle_echelon_component(&ctx, &component).await;
+            }
+            _ => {}
         }
     }
 
@@ -57,6 +84,21 @@ impl EventHandler for Handler {
                         .required(true),
                     ),
                 )
+                .add_option(
+                    serenity::builder::CreateCommandOption::new(
+                        serenity::all::CommandOptionType::SubCommand,
+                        "advanced",
+                        "Upload a replay with advanced settings",
+                    )
+                    .add_sub_option(
+                        serenity::builder::CreateCommandOption::new(
+                            serenity::all::CommandOptionType::Attachment,
+                            "file",
+                            "Your .yrpX replay file (max 10MB)",
+                        )
+                        .required(true),
+                    ),
+                )
         })
         .await
         {
@@ -70,12 +112,45 @@ impl EventHandler for Handler {
 }
 
 impl Handler {
+    fn advanced_panel_content() -> &'static str {
+        "Configure advanced settings, then press **Start**.\n\n\
+        **1) Camera view** — standard or top-down.\n\
+        **2) Player order** — Keep default order or swap players.\n\
+        **3) Replay speed** — Playback/render speed multiplier.\n\
+        **4) Video quality** — File size vs quality tradeoff."
+    }
+
+    async fn notify_advanced_start_failure(
+        ctx: &Context,
+        requester_id: UserId,
+        channel_id: ChannelId,
+    ) {
+        let dm_message = format!(
+            "❌ I couldn't post your replay status message in <#{}>. Please check channel permissions and try `/echelon advanced` again.",
+            channel_id.get()
+        );
+
+        if let Err(e) = requester_id
+            .dm(
+                &ctx.http,
+                serenity::builder::CreateMessage::new().content(dm_message),
+            )
+            .await
+        {
+            warn!(
+                "Failed to DM user {} about advanced start failure: {}",
+                requester_id, e
+            );
+        }
+    }
+
     /// Extracts the replay file attachment from a slash command.
     fn extract_file_attachment(
         command: &CommandInteraction,
-    ) -> Option<serenity::model::prelude::Attachment> {
+        subcommand: &str,
+    ) -> Option<Attachment> {
         command.data.options.iter().find_map(|opt| {
-            if opt.name == "convert" {
+            if opt.name == subcommand {
                 // This is a subcommand, need to get the nested options
                 if let serenity::all::CommandDataOptionValue::SubCommand(sub_opts) = &opt.value {
                     // Find the file option within the subcommand options
@@ -100,6 +175,137 @@ impl Handler {
         })
     }
 
+    fn parse_bool(value: &str) -> Option<bool> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "t" | "yes" | "y" | "1" | "on" => Some(true),
+            "false" | "f" | "no" | "n" | "0" | "off" => Some(false),
+            _ => None,
+        }
+    }
+
+    fn parse_video_preset(value: &str) -> Option<VideoPreset> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "file_size" | "filesize" | "file-size" => Some(VideoPreset::FileSize),
+            "balanced" => Some(VideoPreset::Balanced),
+            "quality" => Some(VideoPreset::Quality),
+            _ => None,
+        }
+    }
+
+    fn parse_component_custom_id(custom_id: &str) -> Option<(String, String)> {
+        let rest = custom_id.strip_prefix(ADVANCED_COMPONENT_PREFIX)?;
+        let (token, action) = rest.split_once(':')?;
+        Some((token.to_string(), action.to_string()))
+    }
+
+    fn build_advanced_components(token: &str, config: &ReplayConfig) -> Vec<CreateActionRow> {
+        let top_down_menu = CreateSelectMenu::new(
+            format!("{ADVANCED_COMPONENT_PREFIX}{token}:top_down_view"),
+            CreateSelectMenuKind::String {
+                options: vec![
+                    CreateSelectMenuOption::new("Standard view", "false")
+                        .default_selection(!config.top_down_view),
+                    CreateSelectMenuOption::new("Top-down view", "true")
+                        .default_selection(config.top_down_view),
+                ],
+            },
+        )
+        .placeholder("1) Camera view")
+        .min_values(1)
+        .max_values(1);
+
+        let swap_menu = CreateSelectMenu::new(
+            format!("{ADVANCED_COMPONENT_PREFIX}{token}:swap_players"),
+            CreateSelectMenuKind::String {
+                options: vec![
+                    CreateSelectMenuOption::new("Keep original order", "false")
+                        .default_selection(!config.swap_players),
+                    CreateSelectMenuOption::new("Swap players around", "true")
+                        .default_selection(config.swap_players),
+                ],
+            },
+        )
+        .placeholder("2) Player order")
+        .min_values(1)
+        .max_values(1);
+
+        let speed_menu = CreateSelectMenu::new(
+            format!("{ADVANCED_COMPONENT_PREFIX}{token}:game_speed"),
+            CreateSelectMenuKind::String {
+                options: vec![
+                    CreateSelectMenuOption::new("Slowest (0.5x)", "0.5")
+                        .default_selection(config.game_speed == 0.5),
+                    CreateSelectMenuOption::new("Slow (0.75x)", "0.75")
+                        .default_selection(config.game_speed == 0.75),
+                    CreateSelectMenuOption::new("Normal (1x)", "1.0")
+                        .default_selection(config.game_speed == 1.0),
+                    CreateSelectMenuOption::new("Fast (1.5x)", "1.5")
+                        .default_selection(config.game_speed == 1.5),
+                    CreateSelectMenuOption::new("Faster (2x)", "2.0")
+                        .default_selection(config.game_speed == 2.0),
+                    CreateSelectMenuOption::new("Very Fast (3x)", "3.0")
+                        .default_selection(config.game_speed == 3.0),
+                    CreateSelectMenuOption::new("Timelapse (10x)", "10.0")
+                        .default_selection(config.game_speed == 10.0),
+                ],
+            },
+        )
+        .placeholder("3) Replay speed")
+        .min_values(1)
+        .max_values(1);
+
+        let preset_menu = CreateSelectMenu::new(
+            format!("{ADVANCED_COMPONENT_PREFIX}{token}:video_preset"),
+            CreateSelectMenuKind::String {
+                options: vec![
+                    CreateSelectMenuOption::new("File-size optimized", "file_size")
+                        .default_selection(matches!(config.video_preset, VideoPreset::FileSize)),
+                    CreateSelectMenuOption::new("Balanced (default)", "balanced")
+                        .default_selection(matches!(
+                            config.video_preset,
+                            VideoPreset::Balanced
+                        )),
+                    CreateSelectMenuOption::new("High quality", "quality")
+                        .default_selection(matches!(config.video_preset, VideoPreset::Quality)),
+                ],
+            },
+        )
+        .placeholder("4) Output quality preset")
+        .min_values(1)
+        .max_values(1);
+
+        let buttons = vec![
+            CreateButton::new(format!("{ADVANCED_COMPONENT_PREFIX}{token}:submit"))
+                .label("Start")
+                .style(ButtonStyle::Primary),
+            CreateButton::new(format!("{ADVANCED_COMPONENT_PREFIX}{token}:cancel"))
+                .label("Cancel")
+                .style(ButtonStyle::Secondary),
+        ];
+
+        vec![
+            CreateActionRow::SelectMenu(top_down_menu),
+            CreateActionRow::SelectMenu(swap_menu),
+            CreateActionRow::SelectMenu(speed_menu),
+            CreateActionRow::SelectMenu(preset_menu),
+            CreateActionRow::Buttons(buttons),
+        ]
+    }
+
+    async fn advanced_store(ctx: &Context) -> Arc<RwLock<HashMap<String, PendingAdvancedRequest>>> {
+        let data = ctx.data.read().await;
+        data.get::<AdvancedRequestStore>()
+            .cloned()
+            .expect("Advanced request store missing")
+    }
+
+    fn prune_pending_requests(map: &mut HashMap<String, PendingAdvancedRequest>) {
+        let now = Instant::now();
+        map.retain(|_, req| {
+            now.duration_since(req.created_at) < Duration::from_secs(ADVANCED_COMPONENT_TTL_SECS)
+        });
+    }
+
     /// Sends an error response to the command interaction.
     async fn respond_with_error(ctx: &Context, command: &CommandInteraction, message: &str) {
         let _ = command
@@ -110,8 +316,65 @@ impl Handler {
             .await;
     }
 
-    /// Handles the /echelon slash command.
+    /// Sends an immediate message response to a command interaction.
+    async fn respond_with_command_message(
+        ctx: &Context,
+        command: &CommandInteraction,
+        message: &str,
+    ) {
+        let _ = command
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new().content(message),
+                ),
+            )
+            .await;
+    }
+
+    /// Sends a message response to a component interaction.
+    async fn respond_with_component_message(
+        ctx: &Context,
+        component: &ComponentInteraction,
+        message: &str,
+        ephemeral: bool,
+    ) {
+        let mut response = CreateInteractionResponseMessage::new().content(message);
+        if ephemeral {
+            response = response.ephemeral(true);
+        }
+
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(response),
+            )
+            .await;
+    }
+
+    /// Routes /echelon subcommands.
     async fn handle_echelon_command(&self, ctx: &Context, command: &CommandInteraction) {
+        let Some(subcommand) = command.data.options.first().map(|opt| opt.name.as_str()) else {
+            Self::respond_with_command_message(ctx, command, "❌ Missing subcommand.").await;
+            return;
+        };
+
+        match subcommand {
+            "convert" => self.handle_convert_command(ctx, command).await,
+            "advanced" => self.handle_advanced_command(ctx, command).await,
+            _ => {
+                Self::respond_with_command_message(
+                    ctx,
+                    command,
+                    "❌ Unknown subcommand. Use /echelon convert or /echelon advanced.",
+                )
+                .await;
+            }
+        }
+    }
+
+    /// Handles the /echelon convert command.
+    async fn handle_convert_command(&self, ctx: &Context, command: &CommandInteraction) {
         // Defer the response immediately
         if let Err(e) = command.defer(&ctx.http).await {
             error!("Failed to defer command response: {e}");
@@ -119,7 +382,7 @@ impl Handler {
         }
 
         // Get the file attachment from the convert subcommand
-        let file_attachment = Self::extract_file_attachment(command);
+        let file_attachment = Self::extract_file_attachment(command, "convert");
 
         let Some(attachment) = file_attachment else {
             Self::respond_with_error(ctx, command, "❌ No file attachment provided").await;
@@ -212,6 +475,377 @@ impl Handler {
                     "❌ Failed to download the file. Please check the file size and try again."
                 };
                 Self::respond_with_error(ctx, command, error_msg).await;
+            }
+        }
+    }
+
+    /// Handles the /echelon advanced command.
+    async fn handle_advanced_command(&self, ctx: &Context, command: &CommandInteraction) {
+        let file_attachment = Self::extract_file_attachment(command, "advanced");
+
+        let Some(attachment) = file_attachment else {
+            Self::respond_with_command_message(ctx, command, "❌ No file attachment provided")
+                .await;
+            return;
+        };
+
+        if !attachment.filename.ends_with(".yrpX") {
+            Self::respond_with_command_message(
+                ctx,
+                command,
+                "❌ Please upload a `.yrpX` replay file",
+            )
+            .await;
+            return;
+        }
+
+        let token = command.id.get().to_string();
+        let config = ReplayConfig::default();
+        let store = Self::advanced_store(ctx).await;
+        {
+            let mut map = store.write().await;
+            Self::prune_pending_requests(&mut map);
+            map.insert(
+                token.clone(),
+                PendingAdvancedRequest {
+                    attachment,
+                    user_id: command.user.id,
+                    created_at: Instant::now(),
+                    config: config.clone(),
+                },
+            );
+        }
+
+        let components = Self::build_advanced_components(&token, &config);
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(Self::advanced_panel_content())
+                .ephemeral(true)
+                .components(components),
+        );
+
+        if let Err(e) = command.create_response(&ctx.http, response).await {
+            error!("Failed to open advanced settings: {e}");
+            let store = Self::advanced_store(ctx).await;
+            let mut map = store.write().await;
+            map.remove(&token);
+        }
+    }
+
+    /// Handles advanced settings component interactions.
+    async fn handle_echelon_component(&self, ctx: &Context, component: &ComponentInteraction) {
+        let Some((token, action)) = Self::parse_component_custom_id(&component.data.custom_id)
+        else {
+            return;
+        };
+        let selected_value = if matches!(
+            action.as_str(),
+            "top_down_view" | "swap_players" | "game_speed" | "video_preset"
+        ) {
+            match &component.data.kind {
+                ComponentInteractionDataKind::StringSelect { values } => {
+                    values.first().cloned()
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        let store = Self::advanced_store(ctx).await;
+        let mut map = store.write().await;
+        Self::prune_pending_requests(&mut map);
+
+        let Some(pending) = map.get(&token) else {
+            drop(map);
+            Self::respond_with_component_message(
+                ctx,
+                component,
+                "❌ This advanced request expired. Please run /echelon advanced again.",
+                true,
+            )
+            .await;
+            return;
+        };
+
+        if pending.user_id != component.user.id {
+            drop(map);
+            Self::respond_with_component_message(
+                ctx,
+                component,
+                "❌ This menu belongs to a different user.",
+                true,
+            )
+            .await;
+            return;
+        }
+
+        match action.as_str() {
+            "top_down_view" | "swap_players" | "game_speed" | "video_preset" => {
+                let Some(value) = selected_value else {
+                    drop(map);
+                    Self::respond_with_component_message(
+                        ctx,
+                        component,
+                        "❌ Missing selection value.",
+                        true,
+                    )
+                    .await;
+                    return;
+                };
+
+                if let Some(pending) = map.get_mut(&token) {
+                    let open_ms = pending.created_at.elapsed().as_millis();
+                    match action.as_str() {
+                        "top_down_view" => {
+                            if let Some(parsed) = Self::parse_bool(&value) {
+                                pending.config.top_down_view = parsed;
+                            }
+                        }
+                        "swap_players" => {
+                            if let Some(parsed) = Self::parse_bool(&value) {
+                                pending.config.swap_players = parsed;
+                            }
+                        }
+                        "game_speed" => {
+                            if let Ok(parsed) = value.parse::<f64>() {
+                                pending.config.game_speed = parsed;
+                            }
+                        }
+                        "video_preset" => {
+                            if let Some(parsed) = Self::parse_video_preset(&value) {
+                                pending.config.video_preset = parsed;
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    info!(
+                        "[advanced:{}] user={} updated {}={} after {}ms",
+                        token, pending.user_id, action, value, open_ms
+                    );
+                }
+
+                drop(map);
+                let _ = component
+                    .create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+                    .await;
+            }
+            "cancel" => {
+                let removed = map.remove(&token);
+                drop(map);
+
+                if let Some(pending) = removed {
+                    info!(
+                        "[advanced:{}] user={} canceled after {}ms",
+                        token,
+                        pending.user_id,
+                        pending.created_at.elapsed().as_millis()
+                    );
+                } else {
+                    warn!(
+                        "[advanced:{}] cancel received but request was already removed",
+                        token
+                    );
+                }
+
+                let _ = component
+                    .create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+                    .await;
+
+                if let Err(e) = component.delete_response(&ctx.http).await {
+                    warn!("Failed to delete advanced ephemeral response after cancel: {e}");
+                }
+            }
+            "submit" => {
+                let pending = map.remove(&token);
+                drop(map);
+
+                let Some(pending) = pending else {
+                    warn!(
+                        "[advanced:{}] submit received but request was already removed",
+                        token
+                    );
+                    Self::respond_with_component_message(
+                        ctx,
+                        component,
+                        "❌ This advanced request was already submitted or expired. Please run /echelon advanced again.",
+                        true,
+                    )
+                    .await;
+                    return;
+                };
+
+                info!(
+                    "[advanced:{}] user={} submitted after {}ms (top_down_view={}, swap_players={}, game_speed={}, video_preset={})",
+                    token,
+                    pending.user_id,
+                    pending.created_at.elapsed().as_millis(),
+                    pending.config.top_down_view,
+                    pending.config.swap_players,
+                    pending.config.game_speed,
+                    pending.config.video_preset.as_str(),
+                );
+
+                if let Err(e) = component
+                    .create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+                    .await
+                {
+                    error!("Failed to respond to advanced submit: {e}");
+                    return;
+                }
+
+                if let Err(e) = component.delete_response(&ctx.http).await {
+                    warn!("Failed to delete advanced ephemeral response after submit: {e}");
+                }
+
+                let server_url = get_server_url();
+                let http = ctx.http.clone();
+                let channel_id = component.channel_id;
+                let requester_id = component.user.id;
+                let status_msg = match channel_id
+                    .say(
+                        &ctx.http,
+                        format!(
+                            "⏳ Uploading replay for {}...",
+                            requester_id.mention()
+                        ),
+                    )
+                    .await
+                {
+                    Ok(message) => message,
+                    Err(e) => {
+                        error!("Failed to post advanced status message: {e}");
+                        Self::notify_advanced_start_failure(ctx, requester_id, channel_id).await;
+                        return;
+                    }
+                };
+                let status_msg_id = status_msg.id;
+
+                tokio::spawn(Self::process_advanced_request(
+                    server_url,
+                    pending.config,
+                    pending.attachment,
+                    channel_id,
+                    status_msg_id,
+                    requester_id,
+                    http,
+                ));
+            }
+            _ => {
+                drop(map);
+                Self::respond_with_component_message(
+                    ctx,
+                    component,
+                    "❌ Unknown action.",
+                    true,
+                )
+                .await;
+            }
+        }
+    }
+
+    async fn process_advanced_request(
+        server_url: &'static str,
+        config: ReplayConfig,
+        attachment: Attachment,
+        channel_id: ChannelId,
+        status_msg_id: MessageId,
+        requester_id: UserId,
+        http: Http,
+    ) {
+        if !attachment.filename.ends_with(".yrpX") {
+            let _ = channel_id
+                .edit_message(
+                    &http,
+                    status_msg_id,
+                    serenity::builder::EditMessage::new()
+                        .content("❌ Please upload a `.yrpX` replay file"),
+                )
+                .await;
+            return;
+        }
+
+        match attachment.download().await {
+            Ok(data) => {
+                match create_replay_with_config(server_url, &config).await {
+                    Ok(task_id) => {
+                        match upload_replay(server_url, &task_id, &data).await {
+                            Ok(()) => {
+                                if let Err(e) = channel_id
+                                    .edit_message(
+                                        &http,
+                                        status_msg_id,
+                                        serenity::builder::EditMessage::new()
+                                            .content("📋 Replay queued!"),
+                                    )
+                                    .await
+                                {
+                                    error!("Failed to edit advanced response: {e}");
+                                    return;
+                                }
+
+                                tokio::spawn(monitor_replay(
+                                    server_url,
+                                    task_id,
+                                    channel_id,
+                                    status_msg_id,
+                                    requester_id,
+                                    http,
+                                ));
+                            }
+                            Err(e) => {
+                                error!("Failed to upload replay: {e}");
+                                let error_msg = if e.contains("500") {
+                                    "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
+                                } else if e.contains("Request failed") {
+                                    "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
+                                } else {
+                                    "❌ Upload failed. Please try again."
+                                };
+                                let _ = channel_id
+                                    .edit_message(
+                                        &http,
+                                        status_msg_id,
+                                        serenity::builder::EditMessage::new().content(error_msg),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to create replay job: {e}");
+                        let error_msg = if e.contains("500") {
+                            "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
+                        } else if e.contains("Request failed") {
+                            "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
+                        } else {
+                            "❌ Failed to create replay job. Please try again."
+                        };
+                        let _ = channel_id
+                            .edit_message(
+                                &http,
+                                status_msg_id,
+                                serenity::builder::EditMessage::new().content(error_msg),
+                            )
+                            .await;
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to download attachment: {e}");
+                let error_msg = if e.to_string().contains("timeout") {
+                    "❌ Download timed out. The file might be too large or the connection is slow. Please try again."
+                } else {
+                    "❌ Failed to download the file. Please check the file size and try again."
+                };
+                let _ = channel_id
+                    .edit_message(
+                        &http,
+                        status_msg_id,
+                        serenity::builder::EditMessage::new().content(error_msg),
+                    )
+                    .await;
             }
         }
     }
@@ -490,6 +1124,11 @@ async fn main() {
         .event_handler(Handler)
         .await
         .expect("Failed to create client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<AdvancedRequestStore>(Arc::new(RwLock::new(HashMap::new())));
+    }
 
     // Clone shard manager for signal handling
     let shard_manager = client.shard_manager.clone();

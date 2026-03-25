@@ -32,6 +32,57 @@ pub enum ReplayStatus {
     NotFound { message: String },
 }
 
+/// Video encoding presets that can be requested when uploading a replay.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoPreset {
+    FileSize,
+    Balanced,
+    Quality,
+}
+
+impl VideoPreset {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VideoPreset::FileSize => "file_size",
+            VideoPreset::Balanced => "balanced",
+            VideoPreset::Quality => "quality",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "file_size" => VideoPreset::FileSize,
+            "quality" => VideoPreset::Quality,
+            _ => VideoPreset::Balanced,
+        }
+    }
+}
+
+/// Replay configuration sent to the server.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReplayConfig {
+    /// Whether to use top-down view.
+    pub top_down_view: bool,
+    /// Whether to swap players for recording.
+    pub swap_players: bool,
+    /// Game speed multiplier (0.5x to 10.0x).
+    pub game_speed: f64,
+    /// Requested video encoding preset.
+    pub video_preset: VideoPreset,
+}
+
+impl Default for ReplayConfig {
+    fn default() -> Self {
+        Self {
+            top_down_view: false,
+            swap_players: false,
+            game_speed: 1.0,
+            video_preset: VideoPreset::Balanced,
+        }
+    }
+}
+
 /// Creates an HTTP client with appropriate timeouts.
 /// Connection timeout: 30s, Total request timeout: 90s
 /// This prevents hanging indefinitely on slow or unresponsive connections.
@@ -46,6 +97,15 @@ fn create_http_client() -> HttpClient {
 /// Creates a replay job with default configuration (no customization for Discord bot).
 /// Returns the unique ID assigned to the replay.
 pub async fn create_replay(server_url: &str) -> Result<String, String> {
+    create_replay_with_config(server_url, &ReplayConfig::default()).await
+}
+
+/// Creates a replay job with the provided configuration.
+/// Returns the unique ID assigned to the replay.
+pub async fn create_replay_with_config(
+    server_url: &str,
+    config: &ReplayConfig,
+) -> Result<String, String> {
     let client = create_http_client();
     let create_url = format!("{}/create", server_url);
 
@@ -60,12 +120,11 @@ pub async fn create_replay(server_url: &str) -> Result<String, String> {
         }
     }
 
-    // Use default configuration
     let body = json!({
-        "top_down_view": false,
-        "swap_players": false,
-        "game_speed": 1.0,
-        "video_preset": "balanced"
+        "top_down_view": config.top_down_view,
+        "swap_players": config.swap_players,
+        "game_speed": config.game_speed,
+        "video_preset": config.video_preset.as_str()
     });
 
     let response = request
