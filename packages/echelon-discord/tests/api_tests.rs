@@ -1,4 +1,5 @@
 use echelon_discord::api::{ReplayConfig, ReplayStatus, create_replay_with_config, download_video, get_replay_status, upload_replay};
+use echelon_discord::helpers::translate_api_error;
 use serde_json::json;
 
 #[test]
@@ -143,6 +144,61 @@ async fn test_upload_replay_server_error() {
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("500"));
+}
+
+#[tokio::test]
+async fn test_upload_replay_invalid_file_includes_server_details() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _mock = server
+        .mock(
+            "POST",
+            mockito::Matcher::Regex(r"^/upload\?task_id=.*".to_string()),
+        )
+        .with_status(400)
+        .with_body("File is not a *.yrpX file.")
+        .expect(1)
+        .create();
+
+    let result = upload_replay(&server.url(), "test-task-id", b"not-a-replay".to_vec()).await;
+
+    let err = result.expect_err("upload should fail for invalid file");
+    assert!(err.contains("400"));
+    assert!(err.contains("File is not a *.yrpX file."));
+}
+
+#[test]
+fn test_translate_api_error_upload_invalid_format() {
+    let msg =
+        translate_api_error("Server returned 400 Bad Request: File is not a *.yrpX file.", "upload");
+    assert!(msg.contains("Invalid replay format"));
+}
+
+#[test]
+fn test_translate_api_error_upload_corrupted_replay() {
+    let msg = translate_api_error(
+        "Server returned 400 Bad Request: Invalid replay file - make sure it is not corrupted.",
+        "upload",
+    );
+    assert!(msg.contains("corrupted or unreadable"));
+}
+
+#[test]
+fn test_translate_api_error_upload_missing_task() {
+    let msg = translate_api_error(
+        "Server returned 404 Not Found: Task ID not found - please create a new task before uploading.",
+        "upload",
+    );
+    assert!(msg.contains("session expired or was not found"));
+}
+
+#[test]
+fn test_translate_api_error_queue_full() {
+    let msg = translate_api_error(
+        "Server returned 503 Service Unavailable: Queue is full. Please try again later.",
+        "create",
+    );
+    assert!(msg.contains("queue is currently full"));
 }
 
 #[tokio::test]

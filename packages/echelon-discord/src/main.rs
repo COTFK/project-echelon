@@ -722,14 +722,15 @@ impl Handler {
                             Err(e) => {
                                 error!("Failed to upload replay: {e}");
                                 let error_msg = translate_api_error(&e, "upload");
-                                update_status_message(channel_id, &http, status_msg_id, error_msg).await;
+                                update_status_message(channel_id, &http, status_msg_id, &error_msg)
+                                    .await;
                             }
                         }
                     }
                     Err(e) => {
                         error!("Failed to create replay job: {e}");
                         let error_msg = translate_api_error(&e, "create");
-                        update_status_message(channel_id, &http, status_msg_id, error_msg).await;
+                        update_status_message(channel_id, &http, status_msg_id, &error_msg).await;
                     }
                 }
             }

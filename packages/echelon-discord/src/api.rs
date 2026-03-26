@@ -100,6 +100,22 @@ fn get_http_client() -> &'static HttpClient {
     HTTP_CLIENT.get_or_init(create_http_client)
 }
 
+async fn format_server_error(response: reqwest::Response) -> String {
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    if body.is_empty() {
+        format!("Server returned {status}")
+    } else {
+        format!("Server returned {status}: {body}")
+    }
+}
+
 /// Adds bot authentication header to a request if BOT_SECRET is set.
 fn add_bot_auth(mut request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
     if let Some(bot_secret) = env::var("BOT_SECRET").ok().filter(|s| !s.is_empty()) {
@@ -136,7 +152,7 @@ pub async fn create_replay_with_config(
         .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!("Server returned {}", response.status()));
+        return Err(format_server_error(response).await);
     }
 
     let id = response
@@ -166,7 +182,7 @@ pub async fn upload_replay(server_url: &str, task_id: &str, data: Vec<u8>) -> Re
         .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!("Server returned {}", response.status()));
+        return Err(format_server_error(response).await);
     }
 
     Ok(())
@@ -184,7 +200,7 @@ pub async fn get_replay_status(server_url: &str, id: &str) -> Result<ReplayStatu
         .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!("Server returned {}", response.status()));
+        return Err(format_server_error(response).await);
     }
 
     let status = response
@@ -207,7 +223,7 @@ pub async fn download_video(server_url: &str, id: &str) -> Result<Vec<u8>, Strin
         .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!("Server returned {}", response.status()));
+        return Err(format_server_error(response).await);
     }
 
     let data = response

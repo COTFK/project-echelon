@@ -6,18 +6,61 @@ use serenity::model::id::{ChannelId, MessageId};
 use tracing::error;
 
 /// Translates API errors into user-friendly messages based on error details and action type.
-pub fn translate_api_error(error: &str, action: &str) -> &'static str {
-    if error.contains("500") {
-        "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments."
-    } else if error.contains("Request failed") {
-        "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help."
-    } else {
-        match action {
-            "upload" => "❌ Upload failed. Please try again.",
-            "create" => "❌ Failed to create replay job. Please try again.",
-            "download" => "❌ Failed to download the file. Please check the file size and try again.",
-            _ => "❌ Operation failed. Please try again.",
+pub fn translate_api_error(error: &str, action: &str) -> String {
+    let lower_error = error.to_ascii_lowercase();
+
+    if lower_error.contains("request failed") {
+        return "❌ Failed to reach the processing server. Please try again; if this error persists, reach out to us for help.".to_string();
+    }
+
+    if lower_error.contains("429") || lower_error.contains("too many requests") {
+        return "⏳ Too many requests right now. Please wait a moment and try again.".to_string();
+    }
+
+    if lower_error.contains("413") || lower_error.contains("payload too large") {
+        return "❌ Replay file is too large. Please upload a smaller file (max 10 MB).".to_string();
+    }
+
+    if lower_error.contains("queue is full") || lower_error.contains("503") {
+        return "🚧 The processing queue is currently full. Please try again in a few minutes.".to_string();
+    }
+
+    if lower_error.contains("file is not a *.yrpx file") {
+        return "❌ Invalid replay format. Please upload a valid `.yrpX` replay file.".to_string();
+    }
+
+    if lower_error.contains("invalid replay file") || lower_error.contains("corrupted") {
+        return "❌ Replay file appears to be corrupted or unreadable. Please export/upload a valid replay and try again.".to_string();
+    }
+
+    if lower_error.contains("task id not found") {
+        return "❌ Upload session expired or was not found. Please run the command again and re-upload your replay.".to_string();
+    }
+
+    if lower_error.contains("task is already finished") {
+        return "❌ This upload session is already closed. Please run the command again to create a new session.".to_string();
+    }
+
+    if lower_error.contains("video not found") {
+        return "❌ Video is not ready or has expired. Please re-upload the replay and try again.".to_string();
+    }
+
+    if lower_error.contains("500") {
+        return "❌ Server error occurred. The processing service is experiencing issues. Please try again in a few moments.".to_string();
+    }
+
+    match action {
+        "upload" => "❌ Upload failed due to an unexpected server response. Please try again.".to_string(),
+        "create" => {
+            "❌ Failed to create replay job due to an unexpected server response. Please try again."
+                .to_string()
         }
+        "download" => {
+            "❌ Failed to download the completed video due to an unexpected server response."
+                .to_string()
+        }
+        _ => "❌ Operation failed due to an unexpected server response. Please try again."
+            .to_string(),
     }
 }
 
