@@ -1,6 +1,4 @@
-use echelon_discord::api::{
-    ReplayStatus, create_replay, download_video, get_replay_status, upload_replay,
-};
+use echelon_discord::api::{ReplayConfig, ReplayStatus, create_replay_with_config, download_video, get_replay_status, upload_replay};
 use serde_json::json;
 
 #[test]
@@ -80,7 +78,7 @@ async fn test_create_replay_success() {
         .expect(1)
         .create();
 
-    let result = create_replay(&server.url()).await;
+    let result = create_replay_with_config(&server.url(), &ReplayConfig::default()).await;
 
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "replay-id-123");
@@ -102,7 +100,7 @@ async fn test_create_replay_server_error() {
         .expect(1)
         .create();
 
-    let result = create_replay(&server.url()).await;
+    let result = create_replay_with_config(&server.url(), &ReplayConfig::default()).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("500"));
@@ -122,7 +120,7 @@ async fn test_upload_replay_success() {
         .create();
 
     let test_data = b"fake replay data";
-    let result = upload_replay(&server.url(), "test-task-id", test_data).await;
+    let result = upload_replay(&server.url(), "test-task-id", test_data.to_vec()).await;
 
     assert!(result.is_ok());
 }
@@ -141,7 +139,7 @@ async fn test_upload_replay_server_error() {
         .create();
 
     let test_data = b"fake replay data";
-    let result = upload_replay(&server.url(), "test-task-id", test_data).await;
+    let result = upload_replay(&server.url(), "test-task-id", test_data.to_vec()).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("500"));
