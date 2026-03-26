@@ -885,7 +885,7 @@ async fn send_video_message(
             .send_message(
                 http,
                 serenity::builder::CreateMessage::new().content(format!(
-                    "{} {}",
+                    "{}{}",
                     requester_id.mention(),
                     message
                 )),
