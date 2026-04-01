@@ -38,7 +38,7 @@ The project consists of three independent services and a custom fork of EDOPro:
   - Real-time job status tracking
   - Video download link
   
-- **[echelon-edopro](https://git.arqalite.org/COTFK/project-echelon-edopro)** - custom fork of EDOPro (C++)
+- **[echelon-edopro](https://github.com/COTFK/project-echelon-edopro)** - custom fork of EDOPro (C++)
   - Added offline rendering to audio and video FIFO pipes, for perfectly smooth 60fps video output
   - Adjusted UI elements to better fit a video recording
   - Added command line arguments and environment variables to configure EDOPro
@@ -93,16 +93,6 @@ Tests include:
 Project Echelon is intended to be deployed in a Docker environment; as such, Dockerfiles and a `compose.yaml` representative of our reference deployment are provided in the repository root.
 
 They should serve well as a starting point for your own deployment and should be ready to use - just `docker compose up --build` and you're good to go.
-
-Additionally, prebuilt images for each service are available in the [Packages] tab, under their respective tags.
-
-For example, to use the latest version of Echelon, run the following images:
-
-- `project-echelon:server-latest`
-- `project-echelon:webui-latest`
-- `project-echelon:discord-latest`
-
-[Packages]: https://git.arqalite.org/COTFK/-/packages/container/project-echelon/versions
 
 ## Contributing
 

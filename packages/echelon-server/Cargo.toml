@@ -4,7 +4,7 @@ description = "A single-threaded server that receives and converts Project Ignis
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://git.arqalite.org/COTFK/project-echelon"
+repository = "https://github.com/COTFK/project-echelon"
 readme = "README.md"
 publish = false
 

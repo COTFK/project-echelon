@@ -14,12 +14,12 @@ It exposes HTTP endpoints that clients can call to queue replays, check their st
 [Rust]: https://rust-lang.org/
 [xvfb]: https://x.org/releases/X11R7.7/doc/man/man1/Xvfb.1.xhtml
 [ffmpeg]: https://www.ffmpeg.org/
-[Our fork of Project Ignis: EDOPro]: https://git.arqalite.org/COTFK/project-echelon-edopro
+[Our fork of Project Ignis: EDOPro]: https://github.com/COTFK/project-echelon-edopro
 
 ## Preparing EDOPro
 You will need to set up a working EDOPro distribution before getting started. 
 
-The easiest way to do so is to install the [official build](https://projectignis.github.io/download.html), then overwriting the `EDOPro` executable with the one compiled from [our fork](https://git.arqalite.org/COTFK/project-echelon-edopro).
+The easiest way to do so is to install the [official build](https://projectignis.github.io/download.html), then overwriting the `EDOPro` executable with the one compiled from [our fork](https://github.com/COTFK/project-echelon-edopro).
 
 Alternatively, we recommend using Docker to run the server, see the "Docker deployments" below - this will set up and compile EDOPro for you.
 

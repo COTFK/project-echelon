@@ -50,7 +50,7 @@ pub fn WebsiteHelp() -> Element {
             "The source code for both Echelon and the custom fork of EDOPro (AGPLv3 licensed) used by it are available on "
             a { 
                 class: "underline",
-                href: "https://git.arqalite.org/COTFK/project-echelon",
+                href: "https://github.com/COTFK/project-echelon",
                 target: "_blank",
                 "our Forgejo instance" 
             }

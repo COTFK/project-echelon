@@ -196,7 +196,7 @@ pub fn PrivacyPolicy() -> Element {
                     strong { "Open Source Notice: " }
                     "Project Echelon is open source software licensed under the MIT License. You can review our code at "
                     a {
-                        href: "https://git.arqalite.org/COTFK/project-echelon",
+                        href: "https://github.com/COTFK/project-echelon",
                         target: "_blank",
                         rel: "noopener noreferrer",
                         class: "link link-info",
